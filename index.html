@@ -1979,32 +1979,28 @@
             loadAppVersion();
         }
 
-        // --- جلب رقم نسخة التطبيق الحالية من Service Worker وعرضه بصفحة الإعدادات ---
+        // --- جلب رقم نسخة التطبيق الحالية مباشرة من ملف service-worker.js وعرضه بصفحة الإعدادات ---
         function loadAppVersion() {
             var versionLabel = document.getElementById("appVersionLabel");
             if (!versionLabel) return;
 
-            // إذا لم يكن Service Worker مدعوماً أو غير مسجّل (مثلاً عند التطوير المحلي)، نعرض رسالة بديلة بدلاً من الانتظار للأبد
-            if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
-                versionLabel.innerText = "إصدار التطبيق: غير متاح حالياً";
-                return;
-            }
-
-            var messageChannel = new MessageChannel();
-            messageChannel.port1.onmessage = function (event) {
-                if (event.data && event.data.version) {
-                    versionLabel.innerText = "إصدار التطبيق: " + event.data.version;
-                }
-            };
-
-            navigator.serviceWorker.controller.postMessage({ type: "GET_VERSION" }, [messageChannel.port2]);
-
-            // مهلة احتياطية: لو لم يرد Service Worker خلال 3 ثوانٍ لأي سبب، نعرض رسالة بديلة حتى لا يبقى النص "..." للأبد
-            setTimeout(function () {
-                if (versionLabel.innerText === "إصدار التطبيق: ...") {
+            fetch("service-worker.js")
+                .then(function (response) {
+                    if (!response.ok) throw new Error("فشل تحميل الملف");
+                    return response.text();
+                })
+                .then(function (text) {
+                    // البحث عن السطر الذي يحدد رقم النسخة، مثل: const CACHE_VERSION = "v4";
+                    var match = text.match(/CACHE_VERSION\s*=\s*["']([^"']+)["']/);
+                    if (match && match[1]) {
+                        versionLabel.innerText = "إصدار التطبيق: " + match[1];
+                    } else {
+                        versionLabel.innerText = "إصدار التطبيق: غير متاح حالياً";
+                    }
+                })
+                .catch(function () {
                     versionLabel.innerText = "إصدار التطبيق: غير متاح حالياً";
-                }
-            }, 3000);
+                });
         }
 
         // --- بناء شبكة اختيار لون التطبيق ---
