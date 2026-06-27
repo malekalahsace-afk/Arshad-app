@@ -1,0 +1,2336 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تطبيق سجل الغيابات</title>
+
+    <!-- --- ربط ملفات PWA: تثبيت كتطبيق مستقل، أيقونات، ولون الواجهة --- -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ff9800">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="سجل الغياب">
+
+    <!-- استدعاء مكتبة SheetJS لقراءة ملفات الإكسل برمجياً -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        /* --- متغيّر اللون الأساسي للتطبيق (قابل للتغيير من صفحة الإعدادات) --- */
+        :root {
+            --primary-color: #ff9800;
+            --primary-color-text: black; /* لون النص فوق الخلفية البرتقالية (يتغيّر تلقائياً حسب سطوع اللون المختار) */
+        }
+
+        /* --- الألوان والتصميم الداكن CSS --- */
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .login-container {
+            width: 90%;
+            max-width: clamp(400px, 55vw, 700px);
+            text-align: center;
+        }
+
+        .brand-name {
+            color: #ffffff;
+            font-size: 28px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .login-card {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border: 1px solid #2d2d2d;
+        }
+
+        .shield-icon {
+            font-size: 50px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            color: #888888;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        .input-group {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            color: #aaaaaa;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 12px;
+            background-color: #2a2a2a;
+            border: 1px solid #3d3d3d;
+            border-radius: 10px;
+            color: #ffffff;
+            box-sizing: border-box;
+            text-align: right;
+            outline: none;
+        }
+        .input-group input:focus, .input-group select:focus {
+            border-color: var(--primary-color);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* تنسيقات لوحة التحكم الرئيسية */
+        .dashboard-container {
+            width: 100%;
+            max-width: clamp(480px, 65vw, 900px);
+            padding: clamp(15px, 1.5vw, 25px);
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .app-title {
+            color: var(--primary-color);
+            font-size: 22px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* اسم المدرسة: قابل للضغط مباشرة لفتح التعديل */
+        .editable-school-name {
+            cursor: pointer;
+        }
+        .editable-school-name:active {
+            opacity: 0.7;
+        }
+
+        /* أيقونة القلم الصغيرة المجاورة لاسم المدرسة (للزينة/الإشارة البصرية فقط، غير قابلة للضغط بنفسها) */
+        .edit-pencil-icon {
+            flex-shrink: 0;
+            opacity: 0.85;
+            pointer-events: none;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 25px;
+            color: white;
+            text-align: right;
+            margin-bottom: 15px;
+            outline: none;
+        }
+        .search-box input:focus {
+            border-color: var(--primary-color);
+        }
+
+        /* --- القائمة المنسدلة لنتائج البحث الفوري عن اسم تلميذ --- */
+        .search-results-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            left: 0;
+            background-color: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 14px;
+            margin-top: -10px;
+            max-height: 260px;
+            overflow-y: auto;
+            z-index: 50;
+            display: none;
+        }
+        .search-results-dropdown.active {
+            display: block;
+        }
+        .search-result-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        .search-result-item:hover, .search-result-item:active {
+            background-color: #2a2a2a;
+        }
+        .search-result-item .grade-tag {
+            font-size: 12px;
+            color: #aaa;
+        }
+        .search-results-empty {
+            padding: 14px 16px;
+            color: #aaa;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn-absent {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.2);
+            transition: 0.2s;
+        }
+        .btn-absent:active {
+            transform: scale(0.98);
+        }
+
+        .time-card, .stats-card, .students-card, .attendance-card, .reports-card {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #2d2d2d;
+        }
+
+        .time-card { border-left: 5px solid var(--primary-color); text-align: center; }
+        .time-card h1 { font-size: 36px; color: var(--primary-color); margin: 0 0 10px 0; }
+        .time-card p { color: #aaa; margin: 0 0 15px 0; }
+
+        .dev-tag {
+            background-color: #2a2a2a;
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 15px;
+        }
+
+        /* --- تصميم أشرطة التقدم للإحصائيات --- */
+        .progress-container {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            height: 12px;
+            width: 100%;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            background-color: #4caf50;
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease-in-out;
+        }
+
+        .list-box {
+            background-color: #252525;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            border-right: 4px solid var(--primary-color);
+        }
+        .list-box.excused { border-right-color: #2196f3; }
+        .list-box.absent { border-right-color: #f44336; }
+
+        /* --- خانات إنذار الغياب بقسم التقارير --- */
+        .alert-box {
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+        }
+        .alert-box.warning {
+            background-color: rgba(255, 193, 7, 0.12);
+            border: 1px solid #ffc107;
+        }
+        .alert-box.danger {
+            background-color: rgba(244, 67, 54, 0.12);
+            border: 1px solid #f44336;
+        }
+        .alert-box-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .alert-box.warning .alert-box-title { color: #ffc107; }
+        .alert-box.danger .alert-box-title { color: #f44336; }
+        .alert-student-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 13px;
+        }
+        .alert-student-row:last-child { border-bottom: none; }
+        .alert-student-row .grade-tag { color: #aaa; font-size: 12px; }
+        .alert-empty-message {
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        /* --- شبكة اختيار لون التطبيق بصفحة الإعدادات --- */
+        .theme-color-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .theme-color-option {
+            border-radius: 12px;
+            padding: 14px 8px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px solid #2d2d2d;
+            background-color: #1e1e1e;
+            color: #ddd;
+            font-size: 13px;
+            font-weight: bold;
+            transition: transform 0.1s ease;
+        }
+        .theme-color-option.selected {
+            border-color: #fff;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+        }
+        .theme-color-option:active {
+            transform: scale(0.95);
+        }
+        .theme-color-swatch {
+            width: 100%;
+            height: 32px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        /* --- كروت ملخص الغياب حسب الفترة (اليوم/الأسبوع/الشهر/السنة) --- */
+        .period-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .period-card {
+            background-color: #1e1e1e;
+            border: 1px solid #2d2d2d;
+            border-bottom: 4px solid #555;
+            border-radius: 14px;
+            padding: 16px 14px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            min-height: 130px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        .period-card:active {
+            transform: scale(0.97);
+        }
+        .period-card.highlight {
+            border: 1px solid var(--primary-color);
+            border-bottom: 4px solid var(--primary-color);
+        }
+        .period-card-label {
+            font-size: 14px;
+            color: #ddd;
+            font-weight: bold;
+            line-height: 1.4;
+        }
+        .period-card-icon {
+            font-size: 30px;
+            opacity: 0.18;
+            position: absolute;
+            bottom: 10px;
+            right: 14px;
+        }
+        .period-card-value {
+            font-size: 34px;
+            font-weight: bold;
+            color: #fff;
+            margin-top: 8px;
+        }
+
+        .list-item-name {
+            font-size: 14px;
+            padding: 6px 0;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+        }
+        .list-item-name:last-child { border-bottom: none; }
+
+        /* --- القائمة الجانبية Sidebar --- */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            right: -280px;
+            width: 260px;
+            height: 100%;
+            background-color: #1a1a1a;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            transition: 0.3s;
+            z-index: 100;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .sidebar.active { right: 0; }
+        .sidebar h3 { color: var(--primary-color); margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        
+        .sidebar-menu { list-style: none; padding: 0; margin: 0; }
+        .sidebar-menu li {
+            padding: 15px;
+            margin-bottom: 5px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: 0.2s;
+        }
+        .sidebar-menu li:hover, .sidebar-menu li.active { background-color: var(--primary-color); color: white; }
+        
+        /* تصميم القائمة الفرعية للشعب والصفوف */
+        .submenu {
+            list-style: none;
+            padding-right: 15px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .submenu.open { display: block; }
+        .submenu li {
+            padding: 10px;
+            font-size: 13px;
+            color: #ccc;
+            border-bottom: 1px solid #2d2d2d;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .submenu li:hover { background-color: #2a2a2a; color: var(--primary-color); }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 99;
+        }
+        .sidebar-overlay.active { display: block; }
+
+        /* أزرار سجل الطلاب والغياب */
+        .btn-green { background-color: #1b5e20; color: white; border: none; padding: 12px; border-radius: 10px; width: 100%; font-weight: bold; margin-bottom: 10px; cursor: pointer; display: block; text-align: center; }
+        .btn-orange { background-color: var(--primary-color); color: white; border: none; padding: 12px; border-radius: 10px; width: 100%; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+
+        /* جداول التطبيق */
+        .students-table, .attendance-table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: right; }
+        .students-table th, .students-table td, .attendance-table th, .attendance-table td { padding: 12px 10px; border-bottom: 1px solid #333; }
+        .students-table th, .attendance-table th { color: var(--primary-color); }
+        
+        .action-cell {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .action-cell span {
+            cursor: pointer;
+            font-size: 18px;
+            transition: transform 0.1s;
+        }
+        .action-cell span:active {
+            transform: scale(1.2);
+        }
+
+        /* خيارات أزرار الغياب والحضور */
+        .attendance-cell-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .radio-group { display: flex; gap: 5px; }
+        .radio-group label {
+            padding: 6px 10px;
+            background-color: #2a2a2a;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .radio-group input { display: none; }
+        .radio-group input:checked + label.lbl-present { background-color: #4caf50; color: white; }
+        .radio-group input:checked + label.lbl-absent { background-color: #f44336; color: white; }
+        .radio-group input:checked + label.lbl-excused { background-color: #2196f3; color: white; }
+
+        /* تصميم القائمة المنسدلة الفرعية لتفاصيل الإجازة */
+        .excused-details-select {
+            width: 100%;
+            max-width: 180px;
+            padding: 6px;
+            background-color: #2d2d2d;
+            border: 1px solid #2196f3;
+            border-radius: 5px;
+            color: #ffffff;
+            font-size: 12px;
+            outline: none;
+            display: none;
+        }
+
+        /* --- تصميم النوافذ المنبثقة (Modal) --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-card {
+            background-color: #1e1e1e;
+            width: 90%;
+            max-width: clamp(400px, 50vw, 620px);
+            padding: 25px;
+            border-radius: 20px;
+            border: 1px solid #2d2d2d;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+            text-align: right;
+        }
+        .modal-card h3 { margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 25px; }
+        .btn-modal-save { flex: 1; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-modal-cancel { flex: 1; padding: 12px; background-color: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+
+        /* --- قواعد خاصة بالطباعة: تظهر فقط محتوى صفحة الإحصائيات بخلفية بيضاء وألوان مناسبة للطباعة --- */
+        @media print {
+            body * {
+                visibility: hidden; /* إخفاء كل عناصر الصفحة افتراضياً */
+            }
+
+            /* الحالة الافتراضية: طباعة كل محتوى صفحة الإحصائيات (الكروت الأربعة مع بعض) */
+            #statsPrintArea, #statsPrintArea * {
+                visibility: visible;
+            }
+            #statsPrintArea {
+                position: absolute;
+                top: 0;
+                right: 0;
+                left: 0;
+                width: 100%;
+                background-color: #fff !important;
+                color: #000 !important;
+                box-shadow: none;
+                border: none;
+            }
+
+            /* حالة طباعة فترة واحدة فقط من نافذة التفاصيل المنبثقة: تُفعّل بإضافة كلاس printing-period-detail على body */
+            body.printing-period-detail #statsPrintArea,
+            body.printing-period-detail #statsPrintArea * {
+                visibility: hidden !important; /* نخفي صفحة الإحصائيات بالكامل بهذه الحالة */
+            }
+            body.printing-period-detail #periodDetailPrintArea,
+            body.printing-period-detail #periodDetailPrintArea * {
+                visibility: visible !important;
+            }
+            body.printing-period-detail #periodDetailPrintArea {
+                position: absolute;
+                top: 0;
+                right: 0;
+                left: 0;
+                width: 100%;
+                background-color: #fff !important;
+                color: #000 !important;
+            }
+            body.printing-period-detail #periodDetailPrintArea h3 {
+                color: #000 !important;
+            }
+            body.printing-period-detail #periodDetailPrintArea .stat-item {
+                color: #000 !important;
+            }
+
+            #statsPrintArea h3, #statsPrintArea h4, #statsPrintArea .period-card-label {
+                color: #000 !important;
+            }
+            #statsPrintArea .period-card {
+                background-color: #fff !important;
+                border: 1px solid #999 !important;
+                color: #000 !important;
+                break-inside: avoid;
+            }
+            #statsPrintArea .period-card-value {
+                color: #000 !important;
+            }
+            #statsPrintArea .period-card-icon {
+                display: none; /* الأيقونة الشفافة لا تظهر بوضوح على الطباعة بالأسود والأبيض */
+            }
+            .no-print {
+                display: none !important; /* إخفاء عناصر التحكم (الفلاتر، زر الطباعة) من الطباعة نفسها */
+            }
+            .print-only {
+                display: block !important; /* إظهار النص التوضيحي الخاص بالطباعة فقط عند الطباعة */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="login-container">
+        <div class="logo-area"><h2 class="brand-name">سجل الغيابات</h2></div>
+        <div class="login-card">
+            <div class="shield-icon">🛡️</div>
+            <h2>تسجيل الدخول</h2>
+            <p class="subtitle">يرجى إدخال بيانات الحساب للوصول إلى النظام</p>
+            <div class="input-group">
+                <label>اسم المستخدم</label>
+                <input type="text" id="username" placeholder="Arshad">
+            </div>
+            <div class="input-group">
+                <label>كلمة السر</label>
+                <input type="password" id="password" placeholder="123">
+            </div>
+            <button onclick="checkLogin()" class="btn-login">◀ دخول للنظام</button>
+        </div>
+    </div>
+
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+    <div id="sidebar" class="sidebar">
+        <h3>القائمة الرئيسية 📋</h3>
+        <ul class="sidebar-menu">
+            <li id="menuHome" class="active" onclick="switchPage('home')"><span>🏠 الرئيسية</span></li>
+            <li id="menuStudents" onclick="switchPage('students')"><span>🗂️ التلاميذ</span></li>
+            
+            <!-- زر الصفوف -->
+            <li id="menuGrades" onclick="toggleSubmenu(event)">
+                <span>👥 الصفوف والشعب</span>
+                <span id="arrowIcon" style="font-size: 12px;">▼</span>
+            </li>
+            <ul id="gradesSubmenu" class="submenu"></ul>
+            
+            <li id="menuStats" onclick="switchPage('stats')"><span>📈 الإحصائيات والتقارير</span></li>
+            <li id="menuArchive" onclick="switchPage('archive')"><span>📅 الأرشيف</span></li>
+            <li id="menuSettings" onclick="switchPage('settings')"><span>⚙️ الإعدادات</span></li>
+        </ul>
+    </div>
+
+    <div id="mainDashboard" class="dashboard-container" style="display: none;">
+        <div class="top-bar">
+            <span style="font-size:24px; cursor:pointer;" onclick="toggleSidebar()">☰</span>
+            <h2 class="app-title">
+                <span id="schoolNameText" class="editable-school-name" onclick="changeSchoolName()">الإدارة المدرسية</span>
+                <svg class="edit-pencil-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16.475 2.825a2.1 2.1 0 0 1 2.97 0l1.73 1.73a2.1 2.1 0 0 1 0 2.97L9.6 19a2 2 0 0 1-.99.55l-3.6.85a.7.7 0 0 1-.85-.85l.85-3.6a2 2 0 0 1 .55-.99L16.475 2.825z" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M14.5 4.8l3.7 3.7" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+            </h2>
+            <span style="font-weight:bold;">ارشد الگروشي</span>
+        </div>
+
+        <div class="search-box" style="position: relative;">
+            <input type="text" id="searchInput" oninput="searchStudents()" onfocus="searchStudents()" placeholder="🔍 اكتب اسم التلميذ للبحث الفوري والفلترة...">
+            <div id="searchResultsDropdown" class="search-results-dropdown"></div>
+        </div>
+
+        <!-- الصفحة الرئيسية -->
+        <div id="homePage">
+            <div class="action-buttons">
+                <button class="btn-absent" onclick="openChooseGradeModal()">📅 تسجيل الغياب</button>
+            </div>
+            <div class="time-card">
+                <h1 id="liveClock">00:00:00 م</h1>
+                <p id="liveDate">جاري تحميل التاريخ...</p>
+                <div class="dev-tag">برمجة وتطوير أ. أرشد رياض فضالة الگروشي</div>
+                <div class="dev-tag" style="margin-top: 4px;">07811969939</div>
+            </div>
+            <div class="stats-card">
+                <h3 style="margin-top:0; border-bottom:1px solid #333; padding-bottom:10px;">📊 خلاصة الحضور اليومي</h3>
+                <div class="stat-item"><span>👥 إجمالي التلاميذ الكلي:</span><strong id="totalCount" style="color: var(--primary-color);">0</strong></div>
+                <div class="stat-item"><span>✅ حاضرون اليوم:</span><strong id="presentCount" style="color: #4caf50;">0</strong></div>
+                <div class="stat-item"><span>❌ غائبون اليوم:</span><strong id="absentCount" style="color: #f44336;">0</strong></div>
+                <div class="stat-item"><span>👤 مجازون اليوم:</span><strong id="excusedCount" style="color: #2196f3;">0</strong></div>
+            </div>
+        </div>
+
+        <!-- صفحة إدارة الطلاب -->
+        <div id="studentsPage" style="display: none;">
+            <div class="students-card">
+                <h3 style="margin-top:0; color:var(--primary-color);">سجل التلاميذ الكلي</h3>
+                
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <select id="gradeFilterSelect" onchange="updateStudentsTable()">
+                        <option value="all">عرض جميع الصفوف</option>
+                        <option value="الأول الابتدائي">الأول الابتدائي</option>
+                        <option value="الثاني الابتدائي">الثاني الابتدائي</option>
+                        <option value="الثالث الابتدائي">الثالث الابتدائي</option>
+                        <option value="الرابع الابتدائي">الرابع الابتدائي</option>
+                        <option value="الخامس الابتدائي">الخامس الابتدائي</option>
+                        <option value="السادس الابتدائي">السادس الابتدائي</option>
+                    </select>
+                </div>
+                
+                <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;" onchange="handleExcelImport(event)">
+                <button class="btn-green" onclick="document.getElementById('excelFileInput').click()">📥 استيراد من ملف إكسل</button>
+                
+                <button class="btn-orange" onclick="openAddStudentModal()">➕ إضافة تلميذ يدوياً</button>
+                <table class="students-table">
+                    <thead>
+                        <tr>
+                            <th>الاسم</th>
+                            <th>الصف والشعبة</th>
+                            <th>إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- صفحة تسجيل الغياب -->
+        <div id="attendancePage" style="display: none;">
+            <div class="attendance-card">
+                <h3 id="attendanceTitle" style="margin-top: 0; color: var(--primary-color);">تسجيل حضور وغياب اليوم</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">اختر حالة كل تلميذ ثم اضغط حفظ</p>
+                
+                <table class="attendance-table">
+                    <thead>
+                        <tr>
+                            <th>اسم التلميذ</th>
+                            <th>الحالة والخيارات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendanceTableBody"></tbody>
+                </table>
+                <button class="btn-orange" style="margin-top: 20px;" onclick="saveAttendance()">💾 حفظ غياب اليوم</button>
+            </div>
+        </div>
+
+        <!-- صفحة الإحصائيات المفعلة حديثاً -->
+        <div id="statsPage" style="display: none;">
+            <div class="reports-card" id="statsPrintArea">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">📈 خيارات وتصفية الإحصائيات</h3>
+
+                <div class="input-group no-print">
+                    <label>عرض الإحصائيات حسب الصف:</label>
+                    <select id="statsGradeFilterSelect" onchange="generateAdvancedStatsPage()">
+                        <option value="all">عرض جميع الصفوف</option>
+                    </select>
+                </div>
+
+                <div class="input-group no-print">
+                    <label>أو اختيار تلميذ محدد لعرض إحصائياته الفردية:</label>
+                    <select id="statsStudentFilterSelect" onchange="generateAdvancedStatsPage()">
+                        <option value="all">عرض كل الطلاب (إحصائيات جماعية)</option>
+                    </select>
+                </div>
+
+                <!-- ملخص الغياب حسب الفترة: اليوم / الأسبوع / الشهر / السنة -->
+                <p id="printOnlyFilterInfo" class="print-only" style="display:none; font-size: 14px; margin-bottom: 10px;"></p>
+                <h4 id="periodSummaryTitle" style="color: var(--primary-color); margin-bottom: 10px; margin-top: 20px;">🗓️ ملخص الغياب حسب الفترة</h4>
+                <p style="font-size: 12px; color: #888; margin-top: -5px; margin-bottom: 12px;">اضغط على أي كارت لعرض التفاصيل</p>
+                <div id="periodSummaryBox" class="period-grid"></div>
+
+                <!-- قسم التقارير: تنبيهات الطلاب الذين وصل غيابهم الفعلي السنوي لعتبة تحذيرية أو خطر -->
+                <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0 15px 0;">
+                <h4 style="color: var(--primary-color); margin-bottom: 10px;">📋 التقارير</h4>
+                <p style="font-size: 12px; color: #888; margin-top: -5px; margin-bottom: 12px;">تنبيهات الطلاب الذين تجاوز غيابهم الفعلي (الكلي لهذه السنة) الحد المسموح:</p>
+                <div id="absenceAlertsBox"></div>
+
+                <button class="btn-orange no-print" style="margin-top: 15px;" onclick="printStatsPage()">🖨️ طباعة الإحصائيات</button>
+            </div>
+        </div>
+
+        <!-- صفحة الأرشيف لعرض سجلات الغياب لأي يوم سابق -->
+        <div id="archivePage" style="display: none;">
+            <div class="reports-card">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">📅 أرشيف الغياب اليومي</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">اختر تاريخاً لعرض سجل الحضور والغياب الخاص بذلك اليوم:</p>
+
+                <div class="input-group">
+                    <label>التاريخ</label>
+                    <input type="date" id="archiveDateInput" onchange="loadArchiveDate()">
+                </div>
+
+                <div id="archiveResultBox"></div>
+            </div>
+        </div>
+
+        <!-- صفحة الإعدادات -->
+        <div id="settingsPage" style="display: none;">
+
+            <!-- تخصيص لون التطبيق -->
+            <div class="reports-card">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">🎨 لون التطبيق</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">اختر اللون المميز للتطبيق:</p>
+
+                <div id="themeColorGrid" class="theme-color-grid"></div>
+            </div>
+
+            <!-- تبديل اسم المستخدم وكلمة السر -->
+            <div class="reports-card">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">🔑 تبديل اسم المستخدم وكلمة السر</h3>
+
+                <div class="input-group">
+                    <label>كلمة السر الحالية (للتأكيد)</label>
+                    <input type="password" id="settingsCurrentPassword" placeholder="أدخل كلمة السر الحالية">
+                </div>
+
+                <div class="input-group">
+                    <label>اسم المستخدم الجديد</label>
+                    <input type="text" id="settingsNewUsername" placeholder="اتركه فارغاً إذا لا تريد تغييره">
+                </div>
+
+                <div class="input-group">
+                    <label>كلمة السر الجديدة</label>
+                    <input type="password" id="settingsNewPassword" placeholder="اتركها فارغة إذا لا تريد تغييرها">
+                </div>
+
+                <button class="btn-orange" onclick="updateLoginCredentials()">🔑 تحديث بيانات الدخول</button>
+            </div>
+
+            <!-- النسخة الاحتياطية: تصدير واستيراد -->
+            <div class="reports-card">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">💾 نسخة احتياطية للبيانات</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">تصدير كل بيانات التلاميذ وسجلات الغياب كملف إكسل، أو استرجاعها من ملف سابق.</p>
+
+                <button class="btn-orange" onclick="exportBackupToExcel()">⬇️ تصدير نسخة احتياطية (إكسل)</button>
+
+                <input type="file" id="backupFileInput" accept=".xlsx, .xls" style="display: none;" onchange="handleBackupImport(event)">
+                <button class="btn-orange" style="background-color: #2196f3;" onclick="document.getElementById('backupFileInput').click()">⬆️ استيراد نسخة احتياطية</button>
+            </div>
+
+            <!-- حذف كل البيانات -->
+            <div class="reports-card">
+                <h3 style="margin-top: 0; color: #f44336; border-bottom: 1px solid #333; padding-bottom: 10px;">🗑️ حذف كل البيانات</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 15px;">سيتم حذف كل التلاميذ وكل سجلات الغياب نهائياً والبدء من جديد. هذا الإجراء لا يمكن التراجع عنه!</p>
+
+                <button class="btn-orange" style="background-color: #f44336;" onclick="confirmEraseAllData()">🗑️ حذف كل البيانات والبدء من جديد</button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- --- واجهة منبثقة لاختيار الصف أو الشعبة عند الضغط على زر "تسجيل الغياب" --- -->
+    <div id="chooseGradeModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3>📅 اختيار الصف أو الشعبة</h3>
+            <p style="color: #aaa; font-size: 13px; margin-bottom: 20px;">الرجاء اختيار الصف المُراد تدوين غيابه اليوم من القائمة أدناه:</p>
+            
+            <div class="input-group">
+                <label>الصفوف والشعب المتاحة</label>
+                <select id="modalChooseGradeSelect"></select>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-save" onclick="submitGradeChoice()">◀ الذهاب للتسجيل</button>
+                <button class="btn-modal-cancel" onclick="closeChooseGradeModal()">❌ إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- نافذة تفاصيل ملخص الفترة: تعرض عدد مرات الحضور/الغياب/الإجازة لفترة محددة --- -->
+    <div id="periodDetailModal" class="modal-overlay">
+        <div class="modal-card">
+            <div id="periodDetailPrintArea">
+                <h3 id="periodDetailTitle">📊 تفاصيل الفترة</h3>
+                <p id="periodDetailFilterInfo" style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 15px;"></p>
+
+                <div class="stat-item"><span>✅ عدد مرات الحضور:</span><strong id="periodDetailPresent" style="color: #4caf50;">0</strong></div>
+                <div class="stat-item"><span>❌ عدد مرات الغياب:</span><strong id="periodDetailAbsent" style="color: #f44336;">0</strong></div>
+                <div class="stat-item"><span>👤 عدد مرات الإجازة:</span><strong id="periodDetailExcused" style="color: #2196f3;">0</strong></div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-save no-print" onclick="printPeriodDetail()">🖨️ طباعة هذا الملخص</button>
+                <button class="btn-modal-cancel no-print" onclick="closePeriodDetailModal()">❌ إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- نافذة بطاقة معلومات التلميذ، تظهر عند الضغط على نتيجة بحث --- -->
+    <div id="studentInfoModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="studentInfoName">👤 اسم التلميذ</h3>
+
+            <div class="stat-item"><span>🏷️ الصف:</span><strong id="studentInfoGrade" style="color: var(--primary-color);">-</strong></div>
+            <div class="stat-item"><span>📌 حالة الحضور اليوم:</span><strong id="studentInfoTodayStatus">-</strong></div>
+            <div class="stat-item"><span>❌ إجمالي مرات الغياب:</span><strong id="studentInfoAbsentTotal" style="color: #f44336;">0</strong></div>
+            <div class="stat-item"><span>👤 إجمالي مرات الإجازة:</span><strong id="studentInfoExcusedTotal" style="color: #2196f3;">0</strong></div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-cancel" onclick="closeStudentInfoModal()" style="width: 100%;">❌ إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- واجهة إضافة / تعديل تلميذ --- -->
+    <div id="studentModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="modalTitle">📝 إضافة تلميذ جديد</h3>
+            
+            <div class="input-group">
+                <label>الاسم الرباعي للتلميذ</label>
+                <input type="text" id="modalStudentName" placeholder="اكتب الاسم هنا...">
+            </div>
+            
+            <div class="input-group">
+                <label>الصف الابتدائي</label>
+                <select id="modalStudentGrade">
+                    <option value="" selected disabled>-- اختر الصف --</option>
+                    <option value="الأول الابتدائي">الأول الابتدائي</option>
+                    <option value="الثاني الابتدائي">الثاني الابتدائي</option>
+                    <option value="الثالث الابتدائي">الثالث الابتدائي</option>
+                    <option value="الرابع الابتدائي">الرابع الابتدائي</option>
+                    <option value="الخامس الابتدائي">الخامس الابتدائي</option>
+                    <option value="السادس الابتدائي">السادس الابتدائي</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>الشعبة (اتركها فارغة إذا لم توجد شعبة)</label>
+                <select id="modalStudentSection">
+                    <option value="">بدون شعبة (صف واحد)</option>
+                    <option value="أ">الشعبة ( أ )</option>
+                    <option value="ب">الشعبة ( ب )</option>
+                    <option value="ج">الشعبة ( ج )</option>
+                    <option value="د">الشعبة ( د )</option>
+                </select>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-save" onclick="saveStudentData()">💾 حفظ البيانات</button>
+                <button class="btn-modal-cancel" onclick="closeAddStudentModal()">❌ إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var studentsList = JSON.parse(localStorage.getItem("students")) || [];
+
+        // --- نظام الغياب اليومي: كل يوم له سجل مستقل بتاريخه الخاص ---
+        function getTodayKey() {
+            var now = new Date();
+            var y = now.getFullYear();
+            var m = String(now.getMonth() + 1).padStart(2, "0");
+            var d = String(now.getDate()).padStart(2, "0");
+            return y + "-" + m + "-" + d; // مثال: 2026-06-25
+        }
+
+        var TODAY_KEY = getTodayKey();
+
+        var attendanceByDate = JSON.parse(localStorage.getItem("attendanceByDate")) || {};
+
+        // ترحيل تلقائي لأي بيانات قديمة كانت محفوظة بالنظام السابق (مفتاح واحد ثابت "attendanceToday")
+        // حتى لا تضيع بيانات المستخدمين الذين كانوا يستخدمون النسخة القديمة من التطبيق
+        (function migrateOldAttendanceFormat() {
+            var legacyData = localStorage.getItem("attendanceToday");
+            if (legacyData) {
+                try {
+                    var parsedLegacy = JSON.parse(legacyData);
+                    if (parsedLegacy && Object.keys(parsedLegacy).length > 0 && !attendanceByDate[TODAY_KEY]) {
+                        attendanceByDate[TODAY_KEY] = parsedLegacy;
+                        localStorage.setItem("attendanceByDate", JSON.stringify(attendanceByDate));
+                    }
+                } catch (e) { /* تجاهل أي بيانات قديمة تالفة */ }
+                localStorage.removeItem("attendanceToday");
+            }
+        })();
+
+        // سجل غياب اليوم الحالي فقط (مرجع مباشر لليوم الحالي داخل attendanceByDate)
+        if (!attendanceByDate[TODAY_KEY]) attendanceByDate[TODAY_KEY] = {};
+        var attendanceToday = attendanceByDate[TODAY_KEY];
+
+        function saveAttendanceByDate() {
+            attendanceByDate[TODAY_KEY] = attendanceToday;
+            localStorage.setItem("attendanceByDate", JSON.stringify(attendanceByDate));
+        }
+
+        // --- نظام تخصيص لون التطبيق: يطبّق فوراً عند تحميل الصفحة من آخر اختيار محفوظ ---
+        var APP_THEME_COLORS = {
+            orange: { value: "#ff9800", label: "🟠 برتقالي" },
+            purple: { value: "#b39ddb", label: "🟣 بنفسجي فاتح" },
+            red:    { value: "#e53935", label: "🔴 أحمر" },
+            blue:   { value: "#64b5f6", label: "🔵 أزرق فاتح" },
+            green:  { value: "#81c784", label: "🟢 أخضر فاتح" },
+            yellow: { value: "#fdd835", label: "🟡 أصفر" }
+        };
+
+        function applyAppTheme(colorKey) {
+            var theme = APP_THEME_COLORS[colorKey] || APP_THEME_COLORS.orange;
+            document.documentElement.style.setProperty('--primary-color', theme.value);
+            localStorage.setItem("appThemeColor", colorKey);
+        }
+
+        function loadAppTheme() {
+            var savedColorKey = localStorage.getItem("appThemeColor") || "orange";
+            applyAppTheme(savedColorKey);
+            return savedColorKey;
+        }
+
+        // تطبيق اللون المحفوظ فوراً عند تحميل الصفحة (حتى قبل تسجيل الدخول)
+        loadAppTheme();
+
+        var currentPage = 'home';
+        var currentSelectedGrade = 'all'; 
+        var isLoggedIn = false;
+        var editIndex = -1;
+
+        // ترتيب الصفوف الدراسية من الأول للسادس
+        var STANDARD_GRADES_ORDER = [
+            "الأول الابتدائي", "الثاني الابتدائي", "الثالث الابتدائي",
+            "الرابع الابتدائي", "الخامس الابتدائي", "السادس الابتدائي"
+        ];
+        // ترتيب الشعب داخل كل صف: بدون شعبة أولاً، ثم أ، ب، ج، د
+        var SECTION_ORDER = ["", "أ", "ب", "ج", "د"];
+
+        // يحوّل قيمة "الصف - الشعبة" إلى رقم ترتيب رقمي يُستخدم للمقارنة بالفرز
+        // مثال: "الأول الابتدائي - أ" تسبق "الأول الابتدائي - ب" وتسبق "الثاني الابتدائي"
+        function getGradeRank(gradeValue) {
+            if (!gradeValue) return 9999; // أي صف غير معروف يوضع بالنهاية
+
+            var parts = gradeValue.split(" - ");
+            var baseGrade = parts[0].trim();
+            var section = parts[1] ? parts[1].trim() : "";
+
+            var gradeIndex = STANDARD_GRADES_ORDER.indexOf(baseGrade);
+            if (gradeIndex === -1) gradeIndex = STANDARD_GRADES_ORDER.length; // صف غير معروف يوضع بعد كل الصفوف المعروفة
+
+            var sectionIndex = SECTION_ORDER.indexOf(section);
+            if (sectionIndex === -1) sectionIndex = SECTION_ORDER.length; // شعبة غير معروفة توضع بالنهاية ضمن صفها
+
+            return gradeIndex * 10 + sectionIndex; // كل صف يحجز 10 مراتب كافية لشعبه
+        }
+
+        // ترتيب مزدوج: أولاً حسب الصف والشعبة (الأول إلى السادس، وداخل كل صف: بدون شعبة ثم أ ثم ب ثم ج ثم د)
+        // وثانياً، لكل من يتشاركون نفس الصف والشعبة، يُرتبون أبجدياً بالاسم
+        function sortStudentsAlphabetically() {
+            studentsList.sort(function(a, b) {
+                var rankA = getGradeRank(a.grade);
+                var rankB = getGradeRank(b.grade);
+                if (rankA !== rankB) return rankA - rankB;
+                return a.name.localeCompare(b.name, 'ar', { sensitivity: 'base' });
+            });
+        }
+
+        function checkLogin() {
+            var user = document.getElementById("username").value;
+            var pass = document.getElementById("password").value;
+
+            var savedUsername = localStorage.getItem("loginUsername") || "Arshad";
+            var savedPassword = localStorage.getItem("loginPassword") || "123";
+
+            if(user === savedUsername && pass === savedPassword) {
+                isLoggedIn = true;
+                document.getElementById("loginScreen").style.display = "none";
+                document.getElementById("mainDashboard").style.display = "block";
+                document.body.style.alignItems = "flex-start";
+                document.body.style.paddingTop = "20px";
+                
+                loadSchoolName();
+                sortStudentsAlphabetically(); 
+                updateStudentsTable();
+                buildGradesSubmenu(); 
+                calculateStats();
+
+                history.pushState({ page: 'home' }, '');
+            } else {
+                alert("اسم المستخدم أو كلمة السر خطأ!");
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById("sidebar").classList.toggle("active");
+            document.getElementById("sidebarOverlay").classList.toggle("active");
+        }
+
+        function closeGradesSubmenu() {
+            var submenu = document.getElementById("gradesSubmenu");
+            var arrow = document.getElementById("arrowIcon");
+            if(submenu && arrow) {
+                submenu.classList.remove("open");
+                arrow.innerText = "▼";
+            }
+        }
+
+        function getSortedActiveGrades() {
+            var standardGradesOrder = [
+                "الأول الابتدائي", "الثاني الابتدائي", "الثالث الابتدائي",
+                "الرابع الابتدائي", "الخامس الابتدائي", "السادس الابتدائي"
+            ];
+            
+            var activeGradesMap = {};
+            studentsList.forEach(function(student) {
+                if(student.grade) activeGradesMap[student.grade.trim()] = true;
+            });
+
+            var result = [];
+            standardGradesOrder.forEach(function(baseGrade) {
+                if(activeGradesMap[baseGrade]) {
+                    result.push(baseGrade);
+                }
+                var sections = ["أ", "ب", "ج", "د"];
+                sections.forEach(function(sec) {
+                    var fullGradeWithSection = baseGrade + " - " + sec;
+                    if(activeGradesMap[fullGradeWithSection]) {
+                        result.push(fullGradeWithSection);
+                    }
+                });
+            });
+            return result;
+        }
+
+        function buildGradesSubmenu() {
+            var submenu = document.getElementById("gradesSubmenu");
+            if(!submenu) return;
+            submenu.innerHTML = "";
+            
+            var activeGrades = getSortedActiveGrades();
+            
+            activeGrades.forEach(function(gradeName) {
+                var li = document.createElement("li");
+                li.innerText = "🔹 " + gradeName;
+                li.onclick = function() {
+                    closeGradesSubmenu(); 
+                    switchPage('attendance', false, gradeName);
+                };
+                submenu.appendChild(li);
+            });
+            
+            if(activeGrades.length === 0) {
+                submenu.innerHTML = `<li style="color:#aaa; cursor:default; font-size:12px;">⚠️ يرجى استيراد أو إضافة تلاميذ لتوليد الصفوف والشعب</li>`;
+            }
+        }
+
+        function toggleSubmenu(event) {
+            event.stopPropagation(); 
+            var submenu = document.getElementById("gradesSubmenu");
+            var arrow = document.getElementById("arrowIcon");
+            submenu.classList.toggle("open");
+            if(submenu.classList.contains("open")) {
+                arrow.innerText = "▲";
+            } else {
+                arrow.innerText = "▼";
+            }
+        }
+
+        function openChooseGradeModal() {
+            var select = document.getElementById("modalChooseGradeSelect");
+            if(!select) return;
+            select.innerHTML = "";
+
+            var activeGrades = getSortedActiveGrades();
+
+            if(activeGrades.length === 0) {
+                alert("⚠️ لا توجد صفوف أو شعب حالياً! يرجى إضافة تلاميذ أولاً.");
+                return;
+            }
+
+            activeGrades.forEach(function(gradeName) {
+                var option = document.createElement("option");
+                option.value = gradeName;
+                option.innerText = gradeName;
+                select.appendChild(option);
+            });
+
+            document.getElementById("chooseGradeModal").classList.add("active");
+        }
+
+        function closeChooseGradeModal() {
+            document.getElementById("chooseGradeModal").classList.remove("active");
+        }
+
+        function submitGradeChoice() {
+            var select = document.getElementById("modalChooseGradeSelect");
+            if(!select || select.value === "") return;
+            
+            var selectedGrade = select.value;
+            closeChooseGradeModal();
+            switchPage('attendance', false, selectedGrade);
+        }
+
+        // --- دالة التحكم والتنقل المحدثة بدقة لمنع تكرار الرجوع وتحديث الواجهات الفعالة ---
+        function switchPage(page, isBackAction = false, gradeScope = 'all') {
+            currentPage = page;
+            currentSelectedGrade = gradeScope;
+
+            document.getElementById("sidebar").classList.remove("active");
+            document.getElementById("sidebarOverlay").classList.remove("active");
+
+            document.getElementById("homePage").style.display = "none";
+            document.getElementById("studentsPage").style.display = "none";
+            document.getElementById("attendancePage").style.display = "none";
+            document.getElementById("statsPage").style.display = "none";
+            document.getElementById("archivePage").style.display = "none";
+            document.getElementById("settingsPage").style.display = "none";
+
+            document.getElementById("searchInput").value = "";
+
+            document.getElementById("menuHome").classList.remove("active");
+            document.getElementById("menuStudents").classList.remove("active");
+            document.getElementById("menuStats").classList.remove("active");
+            document.getElementById("menuArchive").classList.remove("active");
+            document.getElementById("menuSettings").classList.remove("active");
+
+            if(page !== 'attendance') {
+                closeGradesSubmenu();
+            }
+
+            if(page === 'home') {
+                document.getElementById("homePage").style.display = "block";
+                document.getElementById("menuHome").classList.add("active");
+                sortStudentsAlphabetically();
+                updateStudentsTable();
+                calculateStats();
+                
+                // الرجوع للرئيسية: نستبدل السجل الحالي حتى لا تتراكم عدة محطات "رئيسية" فوق بعض
+                if(!isBackAction && isLoggedIn) history.replaceState({ page: 'home' }, '');
+            } else {
+                if(page === 'students') {
+                    document.getElementById("studentsPage").style.display = "block";
+                    document.getElementById("menuStudents").classList.add("active");
+                    document.getElementById("gradeFilterSelect").value = "all";
+                    sortStudentsAlphabetically();
+                    updateStudentsTable();
+                } else if(page === 'attendance') {
+                    document.getElementById("attendancePage").style.display = "block";
+                    document.getElementById("attendanceTitle").innerText = "📋 سجل غياب: " + currentSelectedGrade;
+                    sortStudentsAlphabetically(); 
+                    buildAttendanceSheet();
+                } else if(page === 'stats') {
+                    document.getElementById("statsPage").style.display = "block";
+                    document.getElementById("menuStats").classList.add("active");
+                    sortStudentsAlphabetically(); // ضمان ترتيب الطلاب (صف وشعبة، ثم أبجدياً) قبل بناء القوائم والإحصائيات
+                    generateAdvancedStatsPage(); // بناء التقارير المتقدمة فور فتح الصفحة
+                } else if(page === 'archive') {
+                    document.getElementById("archivePage").style.display = "block";
+                    document.getElementById("menuArchive").classList.add("active");
+                    initArchivePage(); // تهيئة صفحة الأرشيف عند فتحها
+                } else if(page === 'settings') {
+                    document.getElementById("settingsPage").style.display = "block";
+                    document.getElementById("menuSettings").classList.add("active");
+                    initSettingsPage(); // تهيئة صفحة الإعدادات عند فتحها
+                }
+                
+                // الدخول لصفحة فرعية (غير الرئيسية): نضيف محطة جديدة بالسجل (pushState)
+                // حتى يتراكم History وتقدر ضغطة "رجوع" ترجعك خطوة بخطوة بدل الخروج من التطبيق مباشرة
+                if(!isBackAction && isLoggedIn) {
+                    history.pushState({ page: page }, '');
+                }
+            }
+        }
+
+        window.onpopstate = function(event) {
+            var studentInfoModal = document.getElementById("studentInfoModal");
+            if(studentInfoModal && studentInfoModal.classList.contains("active")) {
+                closeStudentInfoModal();
+                history.pushState({ page: currentPage }, ''); // إعادة المحطة لأننا فقط أغلقنا نافذة منبثقة
+                return;
+            }
+
+            var periodModal = document.getElementById("periodDetailModal");
+            if(periodModal && periodModal.classList.contains("active")) {
+                closePeriodDetailModal();
+                history.pushState({ page: currentPage }, ''); // إعادة المحطة لأننا فقط أغلقنا نافذة منبثقة
+                return;
+            }
+
+            var chooseModal = document.getElementById("chooseGradeModal");
+            if(chooseModal && chooseModal.classList.contains("active")) {
+                closeChooseGradeModal();
+                history.pushState({ page: currentPage }, ''); // إعادة المحطة لأننا فقط أغلقنا نافذة منبثقة
+                return;
+            }
+
+            var modal = document.getElementById("studentModal");
+            if(modal && modal.classList.contains("active")) {
+                closeAddStudentModal();
+                history.pushState({ page: currentPage }, '');
+                return;
+            }
+
+            var sidebar = document.getElementById("sidebar");
+            if(sidebar && sidebar.classList.contains("active")) {
+                toggleSidebar();
+                history.pushState({ page: currentPage }, '');
+                return;
+            }
+
+            if (isLoggedIn) {
+                if (currentPage !== 'home') {
+                    // بغض النظر عن عمق التنقل (صفحة واحدة أو أكثر)، أول ضغطة رجوع تعيدنا دائماً للرئيسية
+                    // ثم نستبدل محطة الـ history الحالية بمحطة "رئيسية" واحدة فقط، حتى لا تبقى محطات قديمة
+                    // متراكمة تتطلب ضغطات رجوع متكررة قبل الخروج الفعلي من التطبيق
+                    switchPage('home', true);
+                    history.replaceState({ page: 'home' }, '');
+                }
+                // إذا كان أصلاً بالرئيسية، نسمح للمتصفح/النظام بإكمال إجراء الرجوع الطبيعي (الخروج من التطبيق)
+            }
+        };
+
+        // --- دوال حساب ملخص الغياب حسب الفترة: اليوم / الأسبوع / الشهر / السنة ---
+        function parseDateKey(dateKey) {
+            var parts = dateKey.split("-");
+            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        }
+
+        function getStartOfWeek(date) {
+            // الأسبوع يبدأ من يوم الأحد
+            var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            d.setDate(d.getDate() - d.getDay()); // getDay(): الأحد = 0
+            return d;
+        }
+
+        function getStartOfMonth(date) {
+            return new Date(date.getFullYear(), date.getMonth(), 1);
+        }
+
+        function getStartOfYear(date) {
+            return new Date(date.getFullYear(), 0, 1);
+        }
+
+        // يجمع عدد مرات الحضور (present) والغياب (absent) والأعذار (excused) عبر كل الأيام المسجّلة
+        // بين تاريخ البداية (شامل) وتاريخ اليوم الحالي (شامل)
+        // gradeFilter: إذا كانت "all" أو فاضية، يحسب كل الطلاب. إذا كانت اسم صف محدد، يحسب طلاب ذاك الصف فقط
+        // studentNameFilter: إذا تم تحديده، يحسب هذا الطالب بعينه فقط (له الأولوية على gradeFilter)
+        function sumAttendanceSince(startDate, gradeFilter, studentNameFilter) {
+            var presentTotal = 0, absentTotal = 0, excusedTotal = 0;
+
+            // بناء خريطة اسم الطالب -> صفه، لتسريع الفلترة (إذا كان هناك فلتر صف وما في فلتر طالب محدد)
+            var studentGradeMap = null;
+            if (!studentNameFilter && gradeFilter && gradeFilter !== "all") {
+                studentGradeMap = {};
+                studentsList.forEach(function(s) { studentGradeMap[s.name] = s.grade; });
+            }
+
+            Object.keys(attendanceByDate).forEach(function(dateKey) {
+                var recordDate = parseDateKey(dateKey);
+                if (recordDate < startDate) return; // قبل بداية الفترة المطلوبة
+
+                var dayRecord = attendanceByDate[dateKey];
+                Object.keys(dayRecord).forEach(function(studentName) {
+                    if (studentNameFilter) {
+                        if (studentName !== studentNameFilter) return; // ليس الطالب المطلوب تحديداً
+                    } else if (studentGradeMap && studentGradeMap[studentName] !== gradeFilter) {
+                        return; // ليس من الصف المطلوب
+                    }
+
+                    var status = dayRecord[studentName];
+                    if (status === "present") {
+                        presentTotal++;
+                    } else if (status === "absent") {
+                        absentTotal++;
+                    } else if (status && status.startsWith("excused")) {
+                        excusedTotal++;
+                    }
+                });
+            });
+
+            return { present: presentTotal, absent: absentTotal, excused: excusedTotal };
+        }
+
+        // تخزين بيانات آخر ملخص فترات تم بناؤه، حتى تقدر النافذة المنبثقة تعرض تفاصيلها عند الضغط على أي كارت
+        var lastPeriodStatsData = {};
+
+        function buildPeriodSummary(gradeFilter, studentNameFilter) {
+            var now = new Date(TODAY_KEY.split("-")[0], TODAY_KEY.split("-")[1] - 1, TODAY_KEY.split("-")[2]);
+
+            var todayStats = sumAttendanceSince(now, gradeFilter, studentNameFilter);
+            var weekStats = sumAttendanceSince(getStartOfWeek(now), gradeFilter, studentNameFilter);
+            var monthStats = sumAttendanceSince(getStartOfMonth(now), gradeFilter, studentNameFilter);
+            var yearStats = sumAttendanceSince(getStartOfYear(now), gradeFilter, studentNameFilter);
+
+            // تجهيز نص يوضح الفلتر المطبّق حالياً (طالب محدد، أو صف محدد، أو الكل) ليُستخدم بنافذة التفاصيل وبالطباعة
+            var filterLabel = studentNameFilter
+                ? "👤 التلميذ: " + studentNameFilter
+                : (gradeFilter !== "all" ? "🏷️ الصف: " + gradeFilter : "👥 جميع الصفوف والطلاب");
+
+            // حفظ البيانات لاستخدامها لاحقاً عند الضغط على الكروت لعرض التفاصيل بالنافذة المنبثقة
+            lastPeriodStatsData = {
+                today: { label: "📌 ملخص اليوم", stats: todayStats, filterLabel: filterLabel },
+                week: { label: "📌 ملخص هذا الأسبوع", stats: weekStats, filterLabel: filterLabel },
+                month: { label: "📌 ملخص هذا الشهر", stats: monthStats, filterLabel: filterLabel },
+                year: { label: "📌 الملخص السنوي الكلي", stats: yearStats, filterLabel: filterLabel }
+            };
+
+            // العدد الكلي المعروض بكل كارت = الغياب الفعلي + الأعذار مجتمعين
+            function periodCard(periodKey, label, stats, highlight) {
+                var totalCount = stats.absent + stats.excused;
+                return `<div class="period-card${highlight ? ' highlight' : ''}" onclick="openPeriodDetailModal('${periodKey}')">
+                    <div class="period-card-label">${label}</div>
+                    <div class="period-card-value">${totalCount}</div>
+                    <div class="period-card-icon">📅</div>
+                </div>`;
+            }
+
+            var html =
+                periodCard("today", "الغياب اليوم<br>(غياب + مجاز)", todayStats, true) +
+                periodCard("week", "الغياب هذا<br>الأسبوع", weekStats, true) +
+                periodCard("month", "الغياب هذا<br>الشهر", monthStats, true) +
+                periodCard("year", "الغياب<br>السنوي الكلي", yearStats, true);
+
+            document.getElementById("periodSummaryBox").innerHTML = html;
+        }
+
+        // فتح النافذة المنبثقة لعرض تفاصيل فترة معينة (حضور / غياب / إجازة)
+        function openPeriodDetailModal(periodKey) {
+            var data = lastPeriodStatsData[periodKey];
+            if (!data) return;
+
+            document.getElementById("periodDetailTitle").innerText = data.label;
+            document.getElementById("periodDetailFilterInfo").innerText = data.filterLabel || "";
+            document.getElementById("periodDetailPresent").innerText = data.stats.present;
+            document.getElementById("periodDetailAbsent").innerText = data.stats.absent;
+            document.getElementById("periodDetailExcused").innerText = data.stats.excused;
+
+            document.getElementById("periodDetailModal").classList.add("active");
+        }
+
+        function closePeriodDetailModal() {
+            document.getElementById("periodDetailModal").classList.remove("active");
+        }
+
+        // --- طباعة ملخص فترة واحدة فقط (اليوم/الأسبوع/الشهر/السنة) من نافذة التفاصيل المفتوحة ---
+        function printPeriodDetail() {
+            document.body.classList.add("printing-period-detail"); // تفعيل قواعد CSS الخاصة بطباعة فترة واحدة فقط
+
+            function cleanupAfterPrint() {
+                document.body.classList.remove("printing-period-detail");
+                window.removeEventListener("afterprint", cleanupAfterPrint);
+            }
+            window.addEventListener("afterprint", cleanupAfterPrint);
+
+            window.print();
+        }
+
+        // بناء قائمة الصفوف المنسدلة بصفحة الإحصائيات (مرة واحدة عند فتح الصفحة، مع الحفاظ على الاختيار الحالي)
+        function buildStatsGradeFilter() {
+            var select = document.getElementById("statsGradeFilterSelect");
+            var previousValue = select.value || "all";
+
+            select.innerHTML = `<option value="all">عرض جميع الصفوف</option>`;
+            getSortedActiveGrades().forEach(function(gradeName) {
+                var opt = document.createElement("option");
+                opt.value = gradeName;
+                opt.innerText = gradeName;
+                select.appendChild(opt);
+            });
+
+            // استرجاع الاختيار السابق إذا كان لا يزال موجوداً ضمن الصفوف الفعّالة
+            if ([...select.options].some(function(o) { return o.value === previousValue; })) {
+                select.value = previousValue;
+            }
+        }
+
+        // بناء قائمة الطلاب المنسدلة بصفحة الإحصائيات. لو فيه فلتر صف مختار، تعرض طلاب ذاك الصف فقط
+        function buildStatsStudentFilter(gradeFilter) {
+            var select = document.getElementById("statsStudentFilterSelect");
+            var previousValue = select.value || "all";
+
+            var relevantStudents = gradeFilter === "all"
+                ? studentsList
+                : studentsList.filter(function(s) { return s.grade === gradeFilter; });
+
+            select.innerHTML = `<option value="all">عرض كل الطلاب (إحصائيات جماعية)</option>`;
+            relevantStudents.forEach(function(s) {
+                var opt = document.createElement("option");
+                opt.value = s.name;
+                opt.innerText = s.name;
+                select.appendChild(opt);
+            });
+
+            // استرجاع الاختيار السابق إذا كان الطالب لا يزال ضمن القائمة الحالية (بعد تغيير فلتر الصف مثلاً)
+            if ([...select.options].some(function(o) { return o.value === previousValue; })) {
+                select.value = previousValue;
+            } else {
+                select.value = "all";
+            }
+        }
+
+        // --- دالة بناء ملخص الفترات بصفحة الإحصائيات، مع تطبيق فلتر الصف و/أو الطالب المختار ---
+        function generateAdvancedStatsPage() {
+            buildStatsGradeFilter(); // بناء/تحديث قائمة الصفوف المنسدلة
+            var gradeFilter = document.getElementById("statsGradeFilterSelect").value || "all";
+
+            buildStatsStudentFilter(gradeFilter); // بناء/تحديث قائمة الطلاب المنسدلة بناءً على الصف المختار
+            var studentFilter = document.getElementById("statsStudentFilterSelect").value || "all";
+            var studentNameFilter = (studentFilter === "all") ? null : studentFilter;
+
+            // عند اختيار طالب محدد، تُحسب الإحصائيات لهذا الطالب فقط بغض النظر عن فلتر الصف
+            buildPeriodSummary(gradeFilter, studentNameFilter);
+
+            // تحديث عنوان قسم الملخص ليعكس ما يُعرض حالياً (جماعي أم لطالب محدد)
+            var summaryTitleEl = document.getElementById("periodSummaryTitle");
+            if (summaryTitleEl) {
+                summaryTitleEl.innerText = studentNameFilter
+                    ? "🗓️ ملخص غياب التلميذ: " + studentNameFilter
+                    : "🗓️ ملخص الغياب حسب الفترة";
+            }
+
+            // تجهيز نص يظهر فقط عند الطباعة، يوضح الفلتر المطبّق حالياً (لأن القوائم المنسدلة نفسها تُخفى بالطباعة)
+            var printInfoEl = document.getElementById("printOnlyFilterInfo");
+            if (printInfoEl) {
+                if (studentNameFilter) {
+                    printInfoEl.innerText = "👤 التلميذ: " + studentNameFilter;
+                } else if (gradeFilter !== "all") {
+                    printInfoEl.innerText = "🏷️ الصف: " + gradeFilter;
+                } else {
+                    printInfoEl.innerText = "👥 جميع الصفوف والطلاب";
+                }
+            }
+
+            buildAbsenceAlerts(); // بناء قائمة إنذارات الغياب (تعرض كل الطلاب دائماً، بغض النظر عن فلاتر الصف/الطالب أعلاه)
+        }
+
+        // --- عتبات إنذار الغياب الفعلي (absent فقط) السنوي الكلي لكل طالب ---
+        var ABSENCE_ALERT_WARNING_THRESHOLD = 10; // 🟡 تنبيه أصفر تحذيري
+        var ABSENCE_ALERT_DANGER_THRESHOLD = 15;  // 🔴 تنبيه أحمر خطر
+
+        // حساب إجمالي مرات الغياب الفعلي (absent) لكل طالب منذ بداية السنة الحالية وحتى اليوم
+        function getYearlyAbsentCounts() {
+            var now = new Date(TODAY_KEY.split("-")[0], TODAY_KEY.split("-")[1] - 1, TODAY_KEY.split("-")[2]);
+            var yearStart = getStartOfYear(now);
+
+            var countsByStudent = {}; // اسم الطالب -> عدد مرات الغياب الفعلي
+            Object.keys(attendanceByDate).forEach(function(dateKey) {
+                var recordDate = parseDateKey(dateKey);
+                if (recordDate < yearStart) return; // قبل بداية السنة الحالية
+
+                var dayRecord = attendanceByDate[dateKey];
+                Object.keys(dayRecord).forEach(function(studentName) {
+                    if (dayRecord[studentName] === "absent") {
+                        countsByStudent[studentName] = (countsByStudent[studentName] || 0) + 1;
+                    }
+                });
+            });
+            return countsByStudent;
+        }
+
+        // بناء قائمة إنذارات الغياب: طلاب بمستوى تحذيري (أصفر) وطلاب بمستوى خطر (أحمر)
+        function buildAbsenceAlerts() {
+            var container = document.getElementById("absenceAlertsBox");
+            if (!container) return;
+
+            var absentCounts = getYearlyAbsentCounts();
+
+            var dangerStudents = [];
+            var warningStudents = [];
+
+            studentsList.forEach(function(student) {
+                var count = absentCounts[student.name] || 0;
+                if (count >= ABSENCE_ALERT_DANGER_THRESHOLD) {
+                    dangerStudents.push({ student: student, count: count });
+                } else if (count >= ABSENCE_ALERT_WARNING_THRESHOLD) {
+                    warningStudents.push({ student: student, count: count });
+                }
+            });
+
+            // ترتيب كل قائمة من الأكثر غياباً للأقل، لتظهر الحالات الأخطر أولاً
+            dangerStudents.sort(function(a, b) { return b.count - a.count; });
+            warningStudents.sort(function(a, b) { return b.count - a.count; });
+
+            function renderAlertRow(item) {
+                return `<div class="alert-student-row">
+                    <span>👤 ${item.student.name} <span class="grade-tag">(${item.student.grade || '-'})</span></span>
+                    <strong>${item.count} يوم</strong>
+                </div>`;
+            }
+
+            var html = "";
+
+            // قسم الخطر (أحمر) أولاً لأنه الأهم
+            html += `<div class="alert-box danger">
+                <div class="alert-box-title">🔴 خطر: وصل الغياب إلى ${ABSENCE_ALERT_DANGER_THRESHOLD} يوماً فأكثر</div>`;
+            html += dangerStudents.length > 0
+                ? dangerStudents.map(renderAlertRow).join("")
+                : `<div class="alert-empty-message">لا يوجد طلاب بهذا المستوى حالياً</div>`;
+            html += `</div>`;
+
+            // قسم التحذير (أصفر) ثانياً
+            html += `<div class="alert-box warning">
+                <div class="alert-box-title">🟡 تحذير: وصل الغياب إلى ${ABSENCE_ALERT_WARNING_THRESHOLD} أيام فأكثر</div>`;
+            html += warningStudents.length > 0
+                ? warningStudents.map(renderAlertRow).join("")
+                : `<div class="alert-empty-message">لا يوجد طلاب بهذا المستوى حالياً</div>`;
+            html += `</div>`;
+
+            container.innerHTML = html;
+        }
+
+        // --- طباعة محتوى صفحة الإحصائيات الحالي (جماعي أو لطالب محدد، بحسب الفلاتر المختارة) ---
+        function printStatsPage() {
+            window.print();
+        }
+
+        // --- دوال صفحة الأرشيف: عرض سجل الغياب المحفوظ لأي تاريخ سابق ---
+        function initArchivePage() {
+            var dateInput = document.getElementById("archiveDateInput");
+            if (!dateInput.value) {
+                dateInput.value = TODAY_KEY; // افتراضياً يعرض تاريخ اليوم
+            }
+            dateInput.max = TODAY_KEY; // لا يمكن اختيار تاريخ بالمستقبل لأنه لا يحتوي على سجل بعد
+            loadArchiveDate();
+        }
+
+        function formatArabicDate(dateKey) {
+            var parts = dateKey.split("-");
+            var d = new Date(parts[0], parts[1] - 1, parts[2]);
+            return d.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        function loadArchiveDate() {
+            var dateInput = document.getElementById("archiveDateInput");
+            var resultBox = document.getElementById("archiveResultBox");
+            var selectedDate = dateInput.value;
+
+            if (!selectedDate) {
+                resultBox.innerHTML = "";
+                return;
+            }
+
+            var dayRecord = attendanceByDate[selectedDate];
+            var total = studentsList.length;
+
+            if (!dayRecord || Object.keys(dayRecord).length === 0) {
+                resultBox.innerHTML = `
+                    <div style="text-align:center; color:#aaa; padding: 25px 10px;">
+                        ⚠️ لا يوجد سجل غياب محفوظ لتاريخ ${formatArabicDate(selectedDate)}.
+                    </div>`;
+                return;
+            }
+
+            var pCount = 0, aCount = 0, eCount = 0;
+            var absentRows = "";
+            var excusedRows = "";
+
+            studentsList.forEach(function(student) {
+                var status = dayRecord[student.name];
+                if (!status) return; // الطالب لم يكن مسجلاً بهذا التاريخ (أُضيف بعد هذا اليوم مثلاً)
+
+                if (status === "present") {
+                    pCount++;
+                } else if (status === "absent") {
+                    aCount++;
+                    absentRows += `<div class="list-item-name">
+                        <span>👤 ${student.name}</span>
+                        <span style="color:#aaa; font-size:12px;">(${student.grade})</span>
+                    </div>`;
+                } else if (status.startsWith("excused")) {
+                    eCount++;
+                    var lessonText = "الدوام كله";
+                    var parts = status.split("_");
+                    if (parts[1] && parts[1] !== "all") {
+                        lessonText = `من الحصة ${parts[1].replace("lesson", "")}`;
+                    }
+                    excusedRows += `<div class="list-item-name">
+                        <span>👤 ${student.name} <small style="color:#2196f3; margin-right:5px;">[${lessonText}]</small></span>
+                        <span style="color:#aaa; font-size:12px;">(${student.grade})</span>
+                    </div>`;
+                }
+            });
+
+            var recordedTotal = pCount + aCount + eCount;
+            var presentPct = recordedTotal > 0 ? Math.round((pCount / recordedTotal) * 100) : 0;
+            var absentPct = recordedTotal > 0 ? Math.round((aCount / recordedTotal) * 100) : 0;
+
+            if (absentRows === "") absentRows = `<div style="color:#aaa; font-size:13px; text-align:center;">✅ لا يوجد غيابات بهذا اليوم.</div>`;
+            if (excusedRows === "") excusedRows = `<div style="color:#aaa; font-size:13px; text-align:center;">✅ لا يوجد طلاب مجازين بهذا اليوم.</div>`;
+
+            resultBox.innerHTML = `
+                <div style="margin-top:10px; margin-bottom:15px; color:var(--primary-color); font-weight:bold;">
+                    📌 سجل يوم: ${formatArabicDate(selectedDate)}
+                </div>
+                <div class="stat-item"><span>👥 عدد المسجَّلين بهذا اليوم:</span><strong style="color:var(--primary-color);">${recordedTotal} من ${total}</strong></div>
+                <div class="stat-item"><span>✅ حاضرون:</span><strong style="color:#4caf50;">${pCount}</strong></div>
+                <div class="stat-item"><span>❌ غائبون:</span><strong style="color:#f44336;">${aCount}</strong></div>
+                <div class="stat-item"><span>👤 مجازون:</span><strong style="color:#2196f3;">${eCount}</strong></div>
+                <div class="stat-item"><span>📊 نسبة الحضور:</span><strong style="color:#4caf50;">${presentPct}%</strong></div>
+                <div class="progress-container"><div class="progress-bar" style="width:${presentPct}%;"></div></div>
+
+                <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+
+                <h4 style="color: #f44336; margin-bottom: 5px;">❌ الغائبون:</h4>
+                <div class="list-box absent">${absentRows}</div>
+
+                <h4 style="color: #2196f3; margin-bottom: 5px; margin-top: 20px;">👤 المجازون:</h4>
+                <div class="list-box excused">${excusedRows}</div>
+            `;
+        }
+
+        function handleExcelImport(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var data = new Uint8Array(e.target.result);
+                var workbook = XLSX.read(data, { type: 'array' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+                var excelRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                var importedCount = 0;
+                
+                for (var i = 1; i < excelRows.length; i++) {
+                    var row = excelRows[i];
+                    var studentName = row[0] ? row[0].toString().trim() : "";
+                    var studentGrade = row[1] ? row[1].toString().trim() : "غير محدد";
+
+                    if (studentName !== "") {
+                        studentsList.push({ name: studentName, grade: studentGrade });
+                        importedCount++;
+                    }
+                }
+
+                if (importedCount > 0) {
+                    sortStudentsAlphabetically(); 
+                    localStorage.setItem("students", JSON.stringify(studentsList));
+                    document.getElementById("gradeFilterSelect").value = "all";
+                    updateStudentsTable();
+                    buildGradesSubmenu(); 
+                    calculateStats();
+                    alert("✅ تم استيراد وترتيب (" + importedCount + ") تلميذ بنجاح من ملف الإكسل!");
+                } else {
+                    alert("❌ لم يتم العثور على أسماء تلاميذ صالحة داخل الملف.");
+                }
+                document.getElementById("excelFileInput").value = "";
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function openAddStudentModal() {
+            editIndex = -1; 
+            document.getElementById("modalTitle").innerText = "📝 إضافة تلميذ جديد";
+            document.getElementById("modalStudentName").value = "";
+            document.getElementById("modalStudentGrade").value = ""; 
+            document.getElementById("modalStudentSection").value = ""; 
+            document.getElementById("studentModal").classList.add("active");
+        }
+
+        function openEditStudentModal(index) {
+            editIndex = index; 
+            document.getElementById("modalTitle").innerText = "✏️ تعديل بيانات التلميذ";
+            
+            var student = studentsList[index];
+            document.getElementById("modalStudentName").value = student.name;
+            
+            var gradeParts = student.grade.split(" - ");
+            var savedGrade = gradeParts[0] ? gradeParts[0].trim() : "";
+            var savedSection = gradeParts[1] ? gradeParts[1].trim() : "";
+            
+            document.getElementById("modalStudentGrade").value = savedGrade;
+            document.getElementById("modalStudentSection").value = savedSection;
+            
+            document.getElementById("studentModal").classList.add("active");
+        }
+
+        function closeAddStudentModal() {
+            document.getElementById("studentModal").classList.remove("active");
+        }
+
+        function saveStudentData() {
+            var name = document.getElementById("modalStudentName").value.trim();
+            var grade = document.getElementById("modalStudentGrade").value;
+            var section = document.getElementById("modalStudentSection").value;
+
+            if(name === "") {
+                alert("يرجى كتابة الاسم الرباعي للتلميذ أولاً!");
+                return;
+            }
+            if(grade === "") {
+                alert("يرجى اختيار الصف الابتدائي للمتعلم!");
+                return;
+            }
+
+            var fullGradeInfo = (section === "") ? grade : grade + " - " + section;
+
+            if (editIndex === -1) {
+                studentsList.push({ name: name, grade: fullGradeInfo });
+                alert("تمت إضافة التلميذ بنجاح.");
+            } else {
+                var oldName = studentsList[editIndex].name;
+                if (attendanceToday[oldName]) {
+                    attendanceToday[name] = attendanceToday[oldName];
+                    if (oldName !== name) delete attendanceToday[oldName];
+                }
+                
+                studentsList[editIndex] = { name: name, grade: fullGradeInfo };
+                alert("تم تحديث بيانات التلميذ بنجاح.");
+            }
+
+            sortStudentsAlphabetically(); 
+            localStorage.setItem("students", JSON.stringify(studentsList));
+            saveAttendanceByDate();
+            
+            closeAddStudentModal();
+            updateStudentsTable();
+            buildGradesSubmenu(); 
+            calculateStats();
+        }
+
+        function searchStudents() {
+            var keyword = document.getElementById("searchInput").value.trim().toLowerCase();
+
+            var studentRows = document.querySelectorAll("#studentsTableBody tr");
+            studentRows.forEach(function(row) {
+                var nameText = row.cells[0].innerText.toLowerCase();
+                if(nameText.includes(keyword)) row.style.display = "";
+                else row.style.display = "none";
+            });
+
+            var attendanceRows = document.querySelectorAll("#attendanceTableBody tr");
+            attendanceRows.forEach(function(row) {
+                var nameText = row.cells[0].innerText.toLowerCase();
+                if(nameText.includes(keyword)) row.style.display = "";
+                else row.style.display = "none";
+            });
+
+            calculateStats(keyword);
+            buildSearchResultsDropdown(keyword);
+        }
+
+        // بناء القائمة المنسدلة بأسماء التلاميذ المطابقة للبحث (تظهر فوق محتوى الصفحة الحالية)
+        function buildSearchResultsDropdown(keyword) {
+            var dropdown = document.getElementById("searchResultsDropdown");
+
+            if (keyword === "") {
+                dropdown.classList.remove("active");
+                dropdown.innerHTML = "";
+                return;
+            }
+
+            var matches = studentsList.filter(function(s) {
+                return s.name.toLowerCase().includes(keyword);
+            });
+
+            if (matches.length === 0) {
+                dropdown.innerHTML = `<div class="search-results-empty">لا يوجد تلميذ مطابق لهذا الاسم</div>`;
+            } else {
+                dropdown.innerHTML = matches.map(function(s) {
+                    // نمرر اسم التلميذ بحذر داخل onclick (escaping علامات الاقتباس المفردة)
+                    var safeName = s.name.replace(/'/g, "\\'");
+                    return `<div class="search-result-item" onclick="openStudentInfoModal('${safeName}')">
+                        <span>👤 ${s.name}</span>
+                        <span class="grade-tag">${s.grade || ''}</span>
+                    </div>`;
+                }).join("");
+            }
+
+            dropdown.classList.add("active");
+        }
+
+        // حساب إجمالي مرات الغياب والإجازة لتلميذ معيّن عبر كل سجلات الأرشيف
+        function getStudentTotalStats(studentName) {
+            var absentTotal = 0, excusedTotal = 0;
+            Object.keys(attendanceByDate).forEach(function(dateKey) {
+                var status = attendanceByDate[dateKey][studentName];
+                if (status === "absent") absentTotal++;
+                else if (status && status.startsWith("excused")) excusedTotal++;
+            });
+            return { absent: absentTotal, excused: excusedTotal };
+        }
+
+        // فتح بطاقة معلومات التلميذ بعد الضغط على نتيجة بحث
+        function openStudentInfoModal(studentName) {
+            var student = studentsList.find(function(s) { return s.name === studentName; });
+            if (!student) return;
+
+            var todayStatus = attendanceToday[student.name] || "present";
+            var statusLabel = "✅ حاضر";
+            var statusColor = "#4caf50";
+            if (todayStatus === "absent") {
+                statusLabel = "❌ غائب";
+                statusColor = "#f44336";
+            } else if (todayStatus.startsWith("excused")) {
+                statusLabel = "👤 مجاز";
+                statusColor = "#2196f3";
+            }
+
+            var totals = getStudentTotalStats(student.name);
+
+            document.getElementById("studentInfoName").innerText = "👤 " + student.name;
+            document.getElementById("studentInfoGrade").innerText = student.grade || "-";
+            document.getElementById("studentInfoTodayStatus").innerText = statusLabel;
+            document.getElementById("studentInfoTodayStatus").style.color = statusColor;
+            document.getElementById("studentInfoAbsentTotal").innerText = totals.absent;
+            document.getElementById("studentInfoExcusedTotal").innerText = totals.excused;
+
+            // إغلاق القائمة المنسدلة عند فتح البطاقة
+            document.getElementById("searchResultsDropdown").classList.remove("active");
+
+            document.getElementById("studentInfoModal").classList.add("active");
+        }
+
+        function closeStudentInfoModal() {
+            document.getElementById("studentInfoModal").classList.remove("active");
+        }
+
+        function changeSchoolName() {
+            var currentName = document.getElementById("schoolNameText").innerText;
+            var newName = prompt("أدخل الاسم الجديد للإدارة المدرسية:", currentName);
+            if (newName && newName.trim() !== "") {
+                document.getElementById("schoolNameText").innerText = newName;
+                localStorage.setItem("schoolName", newName);
+            }
+        }
+
+        function loadSchoolName() {
+            var savedName = localStorage.getItem("schoolName");
+            if (savedName) document.getElementById("schoolNameText").innerText = savedName;
+        }
+
+        // --- دوال صفحة الإعدادات ---
+
+        function initSettingsPage() {
+            // تفريغ حقول كلمة السر دائماً عند فتح الصفحة (لا نعرضها محفوظة بالحقل)
+            document.getElementById("settingsCurrentPassword").value = "";
+            document.getElementById("settingsNewUsername").value = "";
+            document.getElementById("settingsNewPassword").value = "";
+
+            buildThemeColorGrid();
+        }
+
+        // --- بناء شبكة اختيار لون التطبيق ---
+        function buildThemeColorGrid() {
+            var grid = document.getElementById("themeColorGrid");
+            var currentColorKey = localStorage.getItem("appThemeColor") || "orange";
+
+            grid.innerHTML = "";
+            Object.keys(APP_THEME_COLORS).forEach(function(key) {
+                var theme = APP_THEME_COLORS[key];
+                var optionDiv = document.createElement("div");
+                optionDiv.className = "theme-color-option" + (key === currentColorKey ? " selected" : "");
+                optionDiv.innerHTML = `<div class="theme-color-swatch" style="background-color:${theme.value};"></div>${theme.label}`;
+                optionDiv.onclick = function() {
+                    applyAppTheme(key);
+                    buildThemeColorGrid(); // إعادة البناء لتحديث الإطار المميز حول اللون المختار
+                };
+                grid.appendChild(optionDiv);
+            });
+        }
+
+        // --- تبديل اسم المستخدم وكلمة السر ---
+        function updateLoginCredentials() {
+            var currentPasswordInput = document.getElementById("settingsCurrentPassword").value;
+            var newUsername = document.getElementById("settingsNewUsername").value.trim();
+            var newPassword = document.getElementById("settingsNewPassword").value.trim();
+
+            var savedUsername = localStorage.getItem("loginUsername") || "Arshad";
+            var savedPassword = localStorage.getItem("loginPassword") || "123";
+
+            if (currentPasswordInput !== savedPassword) {
+                alert("❌ كلمة السر الحالية غير صحيحة. لم يتم تحديث أي بيانات.");
+                return;
+            }
+
+            if (newUsername === "" && newPassword === "") {
+                alert("⚠️ يرجى إدخال اسم مستخدم جديد أو كلمة سر جديدة على الأقل.");
+                return;
+            }
+
+            if (newUsername !== "") localStorage.setItem("loginUsername", newUsername);
+            if (newPassword !== "") localStorage.setItem("loginPassword", newPassword);
+
+            document.getElementById("settingsCurrentPassword").value = "";
+            document.getElementById("settingsNewUsername").value = "";
+            document.getElementById("settingsNewPassword").value = "";
+
+            alert("✅ تم تحديث بيانات تسجيل الدخول بنجاح. استخدمها بالمرة القادمة.");
+        }
+
+        // --- تصدير نسخة احتياطية كاملة بصيغة إكسل (بدون بيانات تسجيل الدخول) ---
+        function exportBackupToExcel() {
+            var workbook = XLSX.utils.book_new();
+
+            // ورقة 1: قائمة التلاميذ
+            var studentsRows = [["الاسم", "الصف"]];
+            studentsList.forEach(function(s) { studentsRows.push([s.name, s.grade]); });
+            var studentsSheet = XLSX.utils.aoa_to_sheet(studentsRows);
+            XLSX.utils.book_append_sheet(workbook, studentsSheet, "التلاميذ");
+
+            // ورقة 2: كل سجلات الغياب اليومية، كل سجل بصف مستقل (تاريخ / اسم الطالب / الحالة)
+            var attendanceRows = [["التاريخ", "اسم التلميذ", "الحالة"]];
+            Object.keys(attendanceByDate).sort().forEach(function(dateKey) {
+                var dayRecord = attendanceByDate[dateKey];
+                Object.keys(dayRecord).forEach(function(studentName) {
+                    attendanceRows.push([dateKey, studentName, dayRecord[studentName]]);
+                });
+            });
+            var attendanceSheet = XLSX.utils.aoa_to_sheet(attendanceRows);
+            XLSX.utils.book_append_sheet(workbook, attendanceSheet, "سجلات الغياب");
+
+            // ورقة 3: معلومات عامة (اسم المدرسة، اسم المعلم) - بدون أي بيانات دخول
+            var infoRows = [
+                ["البيان", "القيمة"],
+                ["اسم المدرسة", localStorage.getItem("schoolName") || ""],
+                ["تاريخ التصدير", TODAY_KEY]
+            ];
+            var infoSheet = XLSX.utils.aoa_to_sheet(infoRows);
+            XLSX.utils.book_append_sheet(workbook, infoSheet, "معلومات عامة");
+
+            var fileName = "نسخة_احتياطية_" + TODAY_KEY + ".xlsx";
+            XLSX.writeFile(workbook, fileName);
+        }
+
+        // --- استيراد نسخة احتياطية من ملف إكسل سابق ---
+        function handleBackupImport(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            if (!confirm("⚠️ سيتم استبدال بيانات التلاميذ وسجلات الغياب الحالية بمحتوى هذا الملف. هل تريد الاستمرار؟")) {
+                event.target.value = "";
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var data = new Uint8Array(e.target.result);
+                    var workbook = XLSX.read(data, { type: 'array' });
+
+                    // قراءة ورقة التلاميذ
+                    var studentsSheetName = workbook.SheetNames.find(function(n) { return n === "التلاميذ"; });
+                    var importedStudents = [];
+                    if (studentsSheetName) {
+                        var studentsRows = XLSX.utils.sheet_to_json(workbook.Sheets[studentsSheetName], { header: 1 });
+                        for (var i = 1; i < studentsRows.length; i++) { // تجاوز صف العناوين
+                            var row = studentsRows[i];
+                            if (row && row[0]) importedStudents.push({ name: String(row[0]).trim(), grade: row[1] ? String(row[1]).trim() : "" });
+                        }
+                    }
+
+                    // قراءة ورقة سجلات الغياب
+                    var attendanceSheetName = workbook.SheetNames.find(function(n) { return n === "سجلات الغياب"; });
+                    var importedAttendance = {};
+                    if (attendanceSheetName) {
+                        var attendanceRows = XLSX.utils.sheet_to_json(workbook.Sheets[attendanceSheetName], { header: 1 });
+                        for (var j = 1; j < attendanceRows.length; j++) {
+                            var arow = attendanceRows[j];
+                            if (!arow || !arow[0] || !arow[1]) continue;
+                            var dateKey = String(arow[0]).trim();
+                            var studentName = String(arow[1]).trim();
+                            var status = arow[2] ? String(arow[2]).trim() : "present";
+                            if (!importedAttendance[dateKey]) importedAttendance[dateKey] = {};
+                            importedAttendance[dateKey][studentName] = status;
+                        }
+                    }
+
+                    if (importedStudents.length === 0) {
+                        alert("❌ لم يتم العثور على بيانات تلاميذ صالحة بهذا الملف. تأكد من أنه ملف نسخة احتياطية صحيح.");
+                        event.target.value = "";
+                        return;
+                    }
+
+                    // استبدال البيانات الحالية بالكامل
+                    studentsList = importedStudents;
+                    localStorage.setItem("students", JSON.stringify(studentsList));
+
+                    attendanceByDate = importedAttendance;
+                    if (!attendanceByDate[TODAY_KEY]) attendanceByDate[TODAY_KEY] = {};
+                    attendanceToday = attendanceByDate[TODAY_KEY];
+                    localStorage.setItem("attendanceByDate", JSON.stringify(attendanceByDate));
+
+                    // قراءة ورقة المعلومات العامة (اختياري)
+                    var infoSheetName = workbook.SheetNames.find(function(n) { return n === "معلومات عامة"; });
+                    if (infoSheetName) {
+                        var infoRows = XLSX.utils.sheet_to_json(workbook.Sheets[infoSheetName], { header: 1 });
+                        for (var k = 1; k < infoRows.length; k++) {
+                            var irow = infoRows[k];
+                            if (!irow || !irow[0]) continue;
+                            if (irow[0] === "اسم المدرسة" && irow[1]) localStorage.setItem("schoolName", irow[1]);
+                        }
+                        loadSchoolName();
+                    }
+
+                    sortStudentsAlphabetically();
+                    buildGradesSubmenu();
+                    updateStudentsTable();
+                    calculateStats();
+
+                    alert("✅ تم استيراد النسخة الاحتياطية بنجاح! تم استبدال البيانات السابقة بمحتوى الملف.");
+                } catch (err) {
+                    alert("❌ حدث خطأ أثناء قراءة الملف. تأكد من أنه ملف نسخة احتياطية صالح ولم يتم تعديل هيكله.");
+                }
+                event.target.value = "";
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- حذف كل الطلاب وسجلات الغياب والبدء من جديد (بتأكيد مزدوج لأنه إجراء لا يمكن التراجع عنه) ---
+        function confirmEraseAllData() {
+            if (!confirm("⚠️ تحذير: سيتم حذف كل التلاميذ وكل سجلات الغياب نهائياً ولا يمكن التراجع عن هذا الإجراء.\n\nهل أنت متأكد من المتابعة؟")) {
+                return;
+            }
+            if (!confirm("⚠️ تأكيد أخير: هذا سيمحو كل التلاميذ وسجلات الغياب بشكل كامل ونهائي. اضغط 'موافق' فقط إذا كنت متأكداً 100%.")) {
+                return;
+            }
+
+            studentsList = [];
+            attendanceByDate = {};
+            attendanceByDate[TODAY_KEY] = {};
+            attendanceToday = attendanceByDate[TODAY_KEY];
+
+            localStorage.removeItem("students");
+            localStorage.removeItem("attendanceByDate");
+            // ملاحظة: لا نحذف اسم المدرسة، لون التطبيق، أو بيانات تسجيل الدخول - فقط الطلاب وسجلات غيابهم
+
+            sortStudentsAlphabetically();
+            buildGradesSubmenu();
+            updateStudentsTable();
+            calculateStats();
+
+            alert("🗑️ تم حذف كل الطلاب وسجلات الغياب بنجاح.");
+        }
+
+        function updateStudentsTable() {
+            var tbody = document.getElementById("studentsTableBody");
+            if(!tbody) return;
+            
+            tbody.innerHTML = "";
+            var filterValue = document.getElementById("gradeFilterSelect").value;
+            var displayedCount = 0;
+
+            studentsList.forEach(function(student, index) {
+                if (filterValue === "all" || student.grade.includes(filterValue)) {
+                    displayedCount++;
+                    tbody.innerHTML += `<tr>
+                        <td>${student.name}</td>
+                        <td style="color: var(--primary-color);">${student.grade}</td>
+                        <td>
+                            <div class="action-cell">
+                                <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
+                                <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
+                            </div>
+                        </td>
+                    </tr>`;
+                }
+            });
+            
+            document.getElementById("totalCount").innerText = displayedCount;
+        }
+
+        function deleteStudent(index) {
+            if (confirm("هل أنت متأكد من حذف هذا التلميذ نهائياً؟")) {
+                delete attendanceToday[studentsList[index].name];
+                studentsList.splice(index, 1); 
+                localStorage.setItem("students", JSON.stringify(studentsList)); 
+                saveAttendanceByDate();
+                updateStudentsTable(); 
+                buildGradesSubmenu(); 
+                calculateStats(); 
+            }
+        }
+
+        function handleStatusChange(index, value) {
+            var selectEl = document.getElementById(`excused_select_${index}`);
+            if (!selectEl) return;
+            
+            if (value === 'excused') {
+                selectEl.style.display = "block"; 
+            } else {
+                selectEl.style.display = "none";  
+            }
+        }
+
+        function buildAttendanceSheet() {
+            var tbody = document.getElementById("attendanceTableBody");
+            if(!tbody) return;
+            tbody.innerHTML = "";
+            
+            var hasStudents = false;
+
+            studentsList.forEach(function(student, index) {
+                if(student.grade.trim() === currentSelectedGrade.trim()) {
+                    hasStudents = true;
+                    
+                    var savedStatus = attendanceToday[student.name] || "present"; 
+                    var baseStatus = "present"; 
+                    var specificLesson = "all";
+
+                    if (savedStatus.startsWith("excused")) {
+                        baseStatus = "excused";
+                        var parts = savedStatus.split("_");
+                        if (parts[1]) specificLesson = parts[1];
+                    } else if (savedStatus === "absent") {
+                        baseStatus = "absent";
+                    }
+
+                    var isSelectVisible = (baseStatus === 'excused') ? 'display: block;' : 'display: none;';
+
+                    var row = `<tr>
+                        <td>${student.name}</td>
+                        <td>
+                            <div class="attendance-cell-container">
+                                <div class="radio-group">
+                                    <input type="radio" id="p_${index}" name="status_${index}" value="present" ${baseStatus==='present'?'checked':''} onchange="handleStatusChange(${index}, 'present')">
+                                    <label for="p_${index}" class="lbl-present">حاضر</label>
+                                    
+                                    <input type="radio" id="a_${index}" name="status_${index}" value="absent" ${baseStatus==='absent'?'checked':''} onchange="handleStatusChange(${index}, 'absent')">
+                                    <label for="a_${index}" class="lbl-absent">غائب</label>
+                                    
+                                    <input type="radio" id="e_${index}" name="status_${index}" value="excused" ${baseStatus==='excused'?'checked':''} onchange="handleStatusChange(${index}, 'excused')">
+                                    <label for="e_${index}" class="lbl-excused">مجاز</label>
+                                </div>
+                                
+                                <select id="excused_select_${index}" class="excused-details-select" style="${isSelectVisible}">
+                                    <option value="all" ${specificLesson==='all'?'selected':''}>الدوام كله</option>
+                                    <option value="lesson1" ${specificLesson==='lesson1'?'selected':''}>من الدرس الأول</option>
+                                    <option value="lesson2" ${specificLesson==='lesson2'?'selected':''}>من الدرس الثاني</option>
+                                    <option value="lesson3" ${specificLesson==='lesson3'?'selected':''}>من الدرس الثالث</option>
+                                    <option value="lesson4" ${specificLesson==='lesson4'?'selected':''}>من الدرس الرابع</option>
+                                    <option value="lesson5" ${specificLesson==='lesson5'?'selected':''}>من الدرس الخامس</option>
+                                    <option value="lesson6" ${specificLesson==='lesson6'?'selected':''}>من الدرس السادس</option>
+                                </select>
+                            </div>
+                        </td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                }
+            });
+
+            if(!hasStudents) {
+                tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#aaa; padding:20px;">⚠️ لا يوجد تلاميذ مسجلين في هذا الصف/الشعبة حالياً!</td></tr>`;
+            }
+        }
+
+        function saveAttendance() {
+            studentsList.forEach(function(student, index) {
+                var radios = document.getElementsByName(`status_${index}`);
+                if(radios.length > 0) {
+                    var selectedValue = "present";
+                    for (var i = 0; i < radios.length; i++) {
+                        if (radios[i].checked) {
+                            selectedValue = radios[i].value;
+                            break;
+                        }
+                    }
+
+                    if (selectedValue === "excused") {
+                        var lessonSelect = document.getElementById(`excused_select_${index}`);
+                        var lessonValue = lessonSelect ? lessonSelect.value : "all";
+                        attendanceToday[student.name] = "excused_" + lessonValue;
+                    } else {
+                        attendanceToday[student.name] = selectedValue;
+                    }
+                }
+            });
+            saveAttendanceByDate();
+            alert("تم حفظ سجل غياب الصف بنجاح!");
+            switchPage('home'); 
+        }
+
+        function calculateStats(filterKeyword = "") {
+            var pCount = 0, aCount = 0, eCount = 0, totalFiltered = 0;
+            
+            studentsList.forEach(function(student) {
+                if (filterKeyword === "" || student.name.toLowerCase().includes(filterKeyword)) {
+                    totalFiltered++;
+                    var status = attendanceToday[student.name] || "present";
+                    
+                    if(status === "present") pCount++;
+                    else if(status === "absent") aCount++;
+                    else if(status.startsWith("excused")) eCount++;
+                }
+            });
+
+            if(document.getElementById("totalCount")) {
+                document.getElementById("totalCount").innerText = totalFiltered;
+                document.getElementById("presentCount").innerText = pCount;
+                document.getElementById("absentCount").innerText = aCount;
+                document.getElementById("excusedCount").innerText = eCount;
+            }
+        }
+
+        function startClock() {
+            setInterval(function() {
+                var now = new Date();
+                var clockEl = document.getElementById("liveClock");
+                var dateEl = document.getElementById("liveDate");
+                if (clockEl && dateEl) {
+                    clockEl.innerText = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    dateEl.innerText = now.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                }
+            }, 1000);
+        }
+        
+        startClock();
+        calculateStats();
+
+        // إغلاق القائمة المنسدلة لنتائج البحث عند الضغط في أي مكان آخر من الصفحة
+        document.addEventListener("click", function(event) {
+            var searchBox = document.querySelector(".search-box");
+            var dropdown = document.getElementById("searchResultsDropdown");
+            if (searchBox && dropdown && !searchBox.contains(event.target)) {
+                dropdown.classList.remove("active");
+            }
+        });
+
+        // --- تسجيل Service Worker: يفعّل عمل التطبيق بدون اتصال إنترنت بعد أول تحميل ---
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", function () {
+                navigator.serviceWorker.register("service-worker.js").then(function (registration) {
+                    console.log("Service Worker تم تسجيله بنجاح:", registration.scope);
+                }).catch(function (error) {
+                    console.log("فشل تسجيل Service Worker:", error);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
