@@ -8,8 +8,8 @@
     <!-- --- ربط ملفات PWA: تثبيت كتطبيق مستقل، أيقونات، ولون الواجهة --- -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#ff9800">
-    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="سجل الغياب">
@@ -1726,14 +1726,32 @@
                 var excelRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                 
                 var importedCount = 0;
-                
+                var KNOWN_SECTIONS = ["أ", "ب", "ج", "د"]; // حروف الشعب المعروفة التي يتم البحث عنها بآخر خلية الصف
+
                 for (var i = 1; i < excelRows.length; i++) {
                     var row = excelRows[i];
                     var studentName = row[0] ? row[0].toString().trim() : "";
-                    var studentGrade = row[1] ? row[1].toString().trim() : "غير محدد";
+                    var rawGradeCell = row[1] ? row[1].toString().trim() : "غير محدد";
+                    var studentSection = row[2] ? row[2].toString().trim() : "";
+                    var studentGrade = rawGradeCell;
+
+                    // لو لم يوجد عمود شعبة منفصل (C)، نحاول استخراج الشعبة تلقائياً من آخر كلمة بخلية الصف نفسها
+                    // مثال: "الرابع الابتدائي أ" تتحول إلى صف "الرابع الابتدائي" + شعبة "أ"
+                    if (studentSection === "") {
+                        var gradeParts = rawGradeCell.split(" ");
+                        var lastWord = gradeParts[gradeParts.length - 1];
+                        if (KNOWN_SECTIONS.indexOf(lastWord) !== -1 && gradeParts.length > 1) {
+                            studentSection = lastWord;
+                            studentGrade = gradeParts.slice(0, -1).join(" ").trim();
+                        }
+                    }
+
+                    // دمج الصف والشعبة بصيغة "الصف - الشعبة" حتى يتوافق مع نظام الترتيب المزدوج
+                    // (صف ← شعبة ← اسم أبجدي)، أما لو لم تُحدد شعبة، يبقى الصف وحده بدون شرطة
+                    var fullGradeInfo = studentSection !== "" ? (studentGrade + " - " + studentSection) : studentGrade;
 
                     if (studentName !== "") {
-                        studentsList.push({ name: studentName, grade: studentGrade });
+                        studentsList.push({ name: studentName, grade: fullGradeInfo });
                         importedCount++;
                     }
                 }
