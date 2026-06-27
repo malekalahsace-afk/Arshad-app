@@ -3,7 +3,7 @@
 
 // رقم نسخة الكاش - مهم جداً: كل مرة تحدّث الكود وترفع نسخة جديدة، يجب تغيير هذا الرقم
 // (مثلاً v1 -> v2) حتى يكتشف التطبيق وجود تحديث ويحمّل النسخة الجديدة.
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = "attendance-app-" + CACHE_VERSION;
 
 // قائمة كل الملفات الأساسية المطلوبة لعمل التطبيق بدون نت
@@ -78,11 +78,4 @@ self.addEventListener("fetch", function (event) {
       return cachedResponse || fetchPromise;
     })
   );
-});
-
-// --- الرد على طلب رقم النسخة الحالية من الصفحة (تستخدمه صفحة الإعدادات لعرض رقم الإصدار) ---
-self.addEventListener("message", function (event) {
-  if (event.data && event.data.type === "GET_VERSION") {
-    event.ports[0].postMessage({ version: CACHE_VERSION });
-  }
 });
