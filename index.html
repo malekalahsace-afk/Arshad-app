@@ -863,6 +863,9 @@
                 <button class="btn-orange" style="background-color: #f44336;" onclick="confirmEraseAllData()">🗑️ حذف كل البيانات والبدء من جديد</button>
             </div>
 
+            <!-- رقم إصدار التطبيق: يُقرأ تلقائياً من Service Worker، يتحدث وحده بدون تعديل يدوي بكل تحديث -->
+            <p id="appVersionLabel" style="text-align: center; color: #666; font-size: 12px; margin-top: 10px;">إصدار التطبيق: ...</p>
+
         </div>
 
     </div>
@@ -1973,6 +1976,35 @@
             document.getElementById("settingsNewPassword").value = "";
 
             buildThemeColorGrid();
+            loadAppVersion();
+        }
+
+        // --- جلب رقم نسخة التطبيق الحالية من Service Worker وعرضه بصفحة الإعدادات ---
+        function loadAppVersion() {
+            var versionLabel = document.getElementById("appVersionLabel");
+            if (!versionLabel) return;
+
+            // إذا لم يكن Service Worker مدعوماً أو غير مسجّل (مثلاً عند التطوير المحلي)، نعرض رسالة بديلة بدلاً من الانتظار للأبد
+            if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
+                versionLabel.innerText = "إصدار التطبيق: غير متاح حالياً";
+                return;
+            }
+
+            var messageChannel = new MessageChannel();
+            messageChannel.port1.onmessage = function (event) {
+                if (event.data && event.data.version) {
+                    versionLabel.innerText = "إصدار التطبيق: " + event.data.version;
+                }
+            };
+
+            navigator.serviceWorker.controller.postMessage({ type: "GET_VERSION" }, [messageChannel.port2]);
+
+            // مهلة احتياطية: لو لم يرد Service Worker خلال 3 ثوانٍ لأي سبب، نعرض رسالة بديلة حتى لا يبقى النص "..." للأبد
+            setTimeout(function () {
+                if (versionLabel.innerText === "إصدار التطبيق: ...") {
+                    versionLabel.innerText = "إصدار التطبيق: غير متاح حالياً";
+                }
+            }, 3000);
         }
 
         // --- بناء شبكة اختيار لون التطبيق ---
