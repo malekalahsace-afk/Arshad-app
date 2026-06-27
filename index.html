@@ -1728,7 +1728,18 @@
                 var importedCount = 0;
                 var KNOWN_SECTIONS = ["أ", "ب", "ج", "د"]; // حروف الشعب المعروفة التي يتم البحث عنها بآخر خلية الصف
 
-                for (var i = 1; i < excelRows.length; i++) {
+                // الكشف التلقائي عن وجود صف عنوان (Header) بأول الملف، حتى لا يُحذف بالغلط أول طالب فعلي
+                // إذا كانت الخلية الأولى بالصف الأول تساوي كلمات شائعة لعناوين الأعمدة (مثل "الاسم")، نعتبره عنوان ونتجاوزه فقط بهذه الحالة
+                var HEADER_KEYWORDS = ["الاسم", "اسم الطالب", "اسم التلميذ", "name"];
+                var startRowIndex = 0;
+                if (excelRows.length > 0 && excelRows[0][0]) {
+                    var firstCellText = excelRows[0][0].toString().trim().toLowerCase();
+                    if (HEADER_KEYWORDS.some(function(keyword) { return firstCellText === keyword.toLowerCase(); })) {
+                        startRowIndex = 1; // فعلياً صف عنوان، نتجاوزه
+                    }
+                }
+
+                for (var i = startRowIndex; i < excelRows.length; i++) {
                     var row = excelRows[i];
                     var studentName = row[0] ? row[0].toString().trim() : "";
                     var rawGradeCell = row[1] ? row[1].toString().trim() : "غير محدد";
