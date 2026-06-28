@@ -29,6 +29,10 @@
         }
 
         /* --- الألوان والتصميم الداكن CSS --- */
+        html {
+            height: 100%;
+            overflow: hidden; /* منع أي تمرير أو "مط" (bounce) على مستوى الصفحة بأكملها */
+        }
         body {
             background-color: #121212;
             color: #ffffff;
@@ -38,8 +42,13 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            overflow-x: hidden;
+            height: 100%;
+            overflow: hidden; /* تثبيت الصفحة بالكامل؛ التمرير الفعلي يصير بداخل #appScrollArea فقط */
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            overscroll-behavior: none; /* تعطيل تأثير "السحب للتحديث" والمط على حواف الصفحة بالمتصفحات الداعمة */
         }
 
         .login-container {
@@ -121,6 +130,9 @@
             padding: clamp(15px, 1.5vw, 25px);
             box-sizing: border-box;
             position: relative;
+            height: 100vh; /* يشغل كامل ارتفاع الشاشة */
+            overflow-y: auto; /* التمرير الفعلي للمحتوى يصير هنا فقط، لا على مستوى الصفحة بأكملها */
+            -webkit-overflow-scrolling: touch;
         }
 
         .top-bar {
@@ -128,6 +140,12 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background-color: #121212; /* خلفية صلبة حتى لا يظهر المحتوى من تحتها أثناء التمرير */
+            padding: clamp(15px, 1.5vw, 25px) 0 12px 0; /* تعويض الحشو العلوي المحذوف من الحاوية نفسها بهذه الخانة، لضمان نفس المسافة البصرية */
+            margin-top: calc(-1 * clamp(15px, 1.5vw, 25px)); /* سحب الشريط ليبدأ من الحافة العليا الفعلية للحاوية بدل أسفل الحشو */
         }
 
         .app-title {
