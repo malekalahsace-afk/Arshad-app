@@ -934,6 +934,19 @@
                 <div class="stat-item"><span>✅ عدد مرات الحضور:</span><strong id="periodDetailPresent" style="color: #4caf50;">0</strong></div>
                 <div class="stat-item"><span>❌ عدد مرات الغياب:</span><strong id="periodDetailAbsent" style="color: #f44336;">0</strong></div>
                 <div class="stat-item"><span>👤 عدد مرات الإجازة:</span><strong id="periodDetailExcused" style="color: #2196f3;">0</strong></div>
+
+                <!-- قسم تواريخ الغياب والإجازة التفصيلية، يظهر فقط عند اختيار تلميذ محدد ووجود أيام مسجّلة -->
+                <div id="periodDetailDatesSection" style="display: none;">
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 15px 0;">
+                    <div id="periodDetailAbsentDatesBox" style="display: none;">
+                        <h4 style="color: #f44336; font-size: 14px; margin-bottom: 8px;">❌ أيام الغياب:</h4>
+                        <div id="periodDetailAbsentDatesList" class="list-box absent" style="font-size: 13px;"></div>
+                    </div>
+                    <div id="periodDetailExcusedDatesBox" style="display: none; margin-top: 12px;">
+                        <h4 style="color: #2196f3; font-size: 14px; margin-bottom: 8px;">👤 أيام الإجازة:</h4>
+                        <div id="periodDetailExcusedDatesList" class="list-box excused" style="font-size: 13px;"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="modal-buttons">
@@ -1595,6 +1608,7 @@
         // studentNameFilter: إذا تم تحديده، يحسب هذا الطالب بعينه فقط (له الأولوية على gradeFilter)
         function sumAttendanceSince(startDate, gradeFilter, studentNameFilter) {
             var presentTotal = 0, absentTotal = 0, excusedTotal = 0;
+            var absentDates = [], excusedDates = []; // تُعبّأ فقط عند تحديد طالب واحد بعينه (studentNameFilter)
 
             // بناء خريطة اسم الطالب -> صفه، لتسريع الفلترة (إذا كان هناك فلتر صف وما في فلتر طالب محدد)
             var studentGradeMap = null;
@@ -1620,13 +1634,19 @@
                         presentTotal++;
                     } else if (status === "absent") {
                         absentTotal++;
+                        if (studentNameFilter) absentDates.push(dateKey);
                     } else if (status && status.startsWith("excused")) {
                         excusedTotal++;
+                        if (studentNameFilter) excusedDates.push(dateKey);
                     }
                 });
             });
 
-            return { present: presentTotal, absent: absentTotal, excused: excusedTotal };
+            // ترتيب التواريخ من الأحدث إلى الأقدم لعرضها بشكل منطقي بالنافذة المنبثقة
+            absentDates.sort().reverse();
+            excusedDates.sort().reverse();
+
+            return { present: presentTotal, absent: absentTotal, excused: excusedTotal, absentDates: absentDates, excusedDates: excusedDates };
         }
 
         // تخزين بيانات آخر ملخص فترات تم بناؤه، حتى تقدر النافذة المنبثقة تعرض تفاصيلها عند الضغط على أي كارت
@@ -1682,6 +1702,38 @@
             document.getElementById("periodDetailPresent").innerText = data.stats.present;
             document.getElementById("periodDetailAbsent").innerText = data.stats.absent;
             document.getElementById("periodDetailExcused").innerText = data.stats.excused;
+
+            // عرض قائمة التواريخ التفصيلية (فقط متوفرة عند اختيار تلميذ محدد، لا تظهر بالملخص الجماعي/الصف)
+            var datesSection = document.getElementById("periodDetailDatesSection");
+            var absentDatesBox = document.getElementById("periodDetailAbsentDatesBox");
+            var excusedDatesBox = document.getElementById("periodDetailExcusedDatesBox");
+            var absentDates = data.stats.absentDates || [];
+            var excusedDates = data.stats.excusedDates || [];
+
+            if (absentDates.length === 0 && excusedDates.length === 0) {
+                // لا توجد تواريخ لعرضها (إما ملخص جماعي/صف، أو لا يوجد غياب/إجازة بهذه الفترة)
+                datesSection.style.display = "none";
+            } else {
+                datesSection.style.display = "block";
+
+                if (absentDates.length > 0) {
+                    absentDatesBox.style.display = "block";
+                    document.getElementById("periodDetailAbsentDatesList").innerHTML = absentDates.map(function(dateKey) {
+                        return `<div class="list-item-name"><span>📅 ${formatArabicDate(dateKey)}</span></div>`;
+                    }).join("");
+                } else {
+                    absentDatesBox.style.display = "none";
+                }
+
+                if (excusedDates.length > 0) {
+                    excusedDatesBox.style.display = "block";
+                    document.getElementById("periodDetailExcusedDatesList").innerHTML = excusedDates.map(function(dateKey) {
+                        return `<div class="list-item-name"><span>📅 ${formatArabicDate(dateKey)}</span></div>`;
+                    }).join("");
+                } else {
+                    excusedDatesBox.style.display = "none";
+                }
+            }
 
             document.getElementById("periodDetailModal").classList.add("active");
         }
