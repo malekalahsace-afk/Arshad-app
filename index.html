@@ -991,9 +991,39 @@
                 </select>
             </div>
 
+            <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+            <p style="font-size: 12px; color: #888; margin-top: -10px; margin-bottom: 15px;">📌 بيانات إضافية اختيارية (يمكن تركها فارغة وتعبئتها لاحقاً من نفس صفحة التعديل):</p>
+
+            <div class="input-group">
+                <label>رقم هاتف ولي الأمر (اختياري)</label>
+                <input type="tel" id="modalStudentPhone" placeholder="مثال: 07xxxxxxxxx">
+            </div>
+
+            <div class="input-group">
+                <label>العنوان (اختياري)</label>
+                <input type="text" id="modalStudentAddress" placeholder="اكتب عنوان السكن هنا...">
+            </div>
+
             <div class="modal-buttons">
                 <button class="btn-modal-save" onclick="saveStudentData()">💾 حفظ البيانات</button>
                 <button class="btn-modal-cancel" onclick="closeAddStudentModal()">❌ إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- نافذة كتابة/تعديل ملاحظات تلميذ معيّن، يمكن فتحها وتعديلها بأي وقت --- -->
+    <div id="notesModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="notesModalTitle">📝 ملاحظات التلميذ</h3>
+            <p style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 15px;">اكتب أي ملاحظة تخص هذا التلميذ (سلوكية، صحية، أو أي شيء آخر). تُحفظ تلقائياً وتبقى متاحة للتعديل بأي وقت.</p>
+
+            <div class="input-group">
+                <textarea id="notesTextarea" rows="6" placeholder="اكتب الملاحظة هنا..." style="width: 100%; box-sizing: border-box; background-color: #2d2d2d; border: 1px solid #444; border-radius: 8px; color: #fff; padding: 10px; font-family: inherit; font-size: 14px; resize: vertical;"></textarea>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-save" onclick="saveStudentNotes()">💾 حفظ الملاحظة</button>
+                <button class="btn-modal-cancel" onclick="closeNotesModal()">❌ إغلاق</button>
             </div>
         </div>
     </div>
@@ -1357,6 +1387,13 @@
             if(chooseModal && chooseModal.classList.contains("active")) {
                 closeChooseGradeModal();
                 history.pushState({ page: currentPage }, ''); // إعادة المحطة لأننا فقط أغلقنا نافذة منبثقة
+                return;
+            }
+
+            var notesModal = document.getElementById("notesModal");
+            if(notesModal && notesModal.classList.contains("active")) {
+                closeNotesModal();
+                history.pushState({ page: currentPage }, '');
                 return;
             }
 
@@ -1918,6 +1955,8 @@
             document.getElementById("modalStudentName").value = "";
             document.getElementById("modalStudentGrade").value = ""; 
             document.getElementById("modalStudentSection").value = ""; 
+            document.getElementById("modalStudentPhone").value = "";
+            document.getElementById("modalStudentAddress").value = "";
             document.getElementById("studentModal").classList.add("active");
         }
 
@@ -1934,6 +1973,8 @@
             
             document.getElementById("modalStudentGrade").value = savedGrade;
             document.getElementById("modalStudentSection").value = savedSection;
+            document.getElementById("modalStudentPhone").value = student.phone || "";
+            document.getElementById("modalStudentAddress").value = student.address || "";
             
             document.getElementById("studentModal").classList.add("active");
         }
@@ -1942,10 +1983,44 @@
             document.getElementById("studentModal").classList.remove("active");
         }
 
+        // --- نافذة الملاحظات: تتيح كتابة أو تعديل ملاحظة الطالب بأي وقت، بشكل مستقل عن نموذج التعديل الرئيسي ---
+        var notesEditIndex = -1; // فهرس الطالب الذي يتم تعديل ملاحظته حالياً
+
+        function openNotesModal(index) {
+            notesEditIndex = index;
+            var student = studentsList[index];
+            document.getElementById("notesModalTitle").innerText = "📝 ملاحظات: " + student.name;
+            document.getElementById("notesTextarea").value = student.notes || "";
+            document.getElementById("notesModal").classList.add("active");
+        }
+
+        function saveStudentNotes() {
+            if (notesEditIndex === -1 || !studentsList[notesEditIndex]) {
+                closeNotesModal();
+                return;
+            }
+
+            var notesText = document.getElementById("notesTextarea").value.trim();
+            studentsList[notesEditIndex].notes = notesText;
+
+            localStorage.setItem("students", JSON.stringify(studentsList));
+
+            closeNotesModal();
+            updateStudentsTable(); // لتحديث لون أيقونة الملاحظات (مميزة إذا كانت غير فارغة)
+            alert("✅ تم حفظ الملاحظة بنجاح.");
+        }
+
+        function closeNotesModal() {
+            document.getElementById("notesModal").classList.remove("active");
+            notesEditIndex = -1;
+        }
+
         function saveStudentData() {
             var name = document.getElementById("modalStudentName").value.trim();
             var grade = document.getElementById("modalStudentGrade").value;
             var section = document.getElementById("modalStudentSection").value;
+            var phone = document.getElementById("modalStudentPhone").value.trim();
+            var address = document.getElementById("modalStudentAddress").value.trim();
 
             if(name === "") {
                 alert("يرجى كتابة الاسم الرباعي للتلميذ أولاً!");
@@ -1959,7 +2034,7 @@
             var fullGradeInfo = (section === "") ? grade : grade + " - " + section;
 
             if (editIndex === -1) {
-                studentsList.push({ name: name, grade: fullGradeInfo });
+                studentsList.push({ name: name, grade: fullGradeInfo, phone: phone, address: address, notes: "" });
                 alert("تمت إضافة التلميذ بنجاح.");
             } else {
                 var oldName = studentsList[editIndex].name;
@@ -1968,7 +2043,9 @@
                     if (oldName !== name) delete attendanceToday[oldName];
                 }
                 
-                studentsList[editIndex] = { name: name, grade: fullGradeInfo };
+                // الحفاظ على الملاحظات السابقة عند تعديل بيانات الطالب الأخرى
+                var existingNotes = studentsList[editIndex].notes || "";
+                studentsList[editIndex] = { name: name, grade: fullGradeInfo, phone: phone, address: address, notes: existingNotes };
                 alert("تم تحديث بيانات التلميذ بنجاح.");
             }
 
@@ -2181,9 +2258,11 @@
         function exportBackupToExcel() {
             var workbook = XLSX.utils.book_new();
 
-            // ورقة 1: قائمة التلاميذ
-            var studentsRows = [["الاسم", "الصف"]];
-            studentsList.forEach(function(s) { studentsRows.push([s.name, s.grade]); });
+            // ورقة 1: قائمة التلاميذ (شاملة الحقول الاختيارية: هاتف ولي الأمر، العنوان، والملاحظات)
+            var studentsRows = [["الاسم", "الصف", "رقم هاتف ولي الأمر", "العنوان", "ملاحظات"]];
+            studentsList.forEach(function(s) {
+                studentsRows.push([s.name, s.grade, s.phone || "", s.address || "", s.notes || ""]);
+            });
             var studentsSheet = XLSX.utils.aoa_to_sheet(studentsRows);
             XLSX.utils.book_append_sheet(workbook, studentsSheet, "التلاميذ");
 
@@ -2234,7 +2313,16 @@
                         var studentsRows = XLSX.utils.sheet_to_json(workbook.Sheets[studentsSheetName], { header: 1 });
                         for (var i = 1; i < studentsRows.length; i++) { // تجاوز صف العناوين
                             var row = studentsRows[i];
-                            if (row && row[0]) importedStudents.push({ name: String(row[0]).trim(), grade: row[1] ? String(row[1]).trim() : "" });
+                            if (row && row[0]) {
+                                importedStudents.push({
+                                    name: String(row[0]).trim(),
+                                    grade: row[1] ? String(row[1]).trim() : "",
+                                    // الحقول التالية اختيارية: قد لا تكون موجودة بملفات نسخ احتياطية أقدم، فنتعامل معها بأمان
+                                    phone: row[2] ? String(row[2]).trim() : "",
+                                    address: row[3] ? String(row[3]).trim() : "",
+                                    notes: row[4] ? String(row[4]).trim() : ""
+                                });
+                            }
                         }
                     }
 
@@ -2388,11 +2476,14 @@
                 }
 
                 displayedCount++;
+                var hasNotes = student.notes && student.notes.trim() !== "";
+                var notesIconColor = hasNotes ? "color: #ffc107;" : "";
                 tbody.innerHTML += `<tr>
                     <td>${student.name}</td>
                     <td style="color: var(--primary-color);">${student.grade}</td>
                     <td>
                         <div class="action-cell">
+                            <span title="ملاحظات" style="${notesIconColor}" onclick="openNotesModal(${index})">📝</span>
                             <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
                             <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
                         </div>
