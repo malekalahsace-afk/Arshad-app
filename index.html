@@ -16,6 +16,10 @@
 
     <!-- استدعاء مكتبة SheetJS لقراءة ملفات الإكسل برمجياً -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- استدعاء مكتبتي html2canvas وjsPDF لتوليد ملفات PDF مباشرة من محتوى الصفحة (دون الحاجة لنظام طباعة بالجهاز) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
         /* --- متغيّر اللون الأساسي للتطبيق (قابل للتغيير من صفحة الإعدادات) --- */
@@ -559,6 +563,25 @@
         .btn-modal-save { flex: 1; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
         .btn-modal-cancel { flex: 1; padding: 12px; background-color: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
 
+        /* --- إخفاء عناصر التحكم (الفلاتر، الأزرار) مؤقتاً أثناء تصوير المحتوى لتوليد ملف PDF --- */
+        .generating-pdf .no-print {
+            display: none !important;
+        }
+        .generating-pdf {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+        .generating-pdf h3, .generating-pdf h4, .generating-pdf .period-card-label, .generating-pdf .period-card-value {
+            color: #000000 !important;
+        }
+        .generating-pdf .period-card {
+            background-color: #ffffff !important;
+            border: 1px solid #999 !important;
+        }
+        .generating-pdf .period-card-icon {
+            display: none !important;
+        }
+
         /* --- قواعد خاصة بالطباعة: تظهر فقط محتوى صفحة الإحصائيات بخلفية بيضاء وألوان مناسبة للطباعة --- */
         @media print {
             body * {
@@ -800,6 +823,7 @@
                 <div id="absenceAlertsBox"></div>
 
                 <button class="btn-orange no-print" style="margin-top: 15px;" onclick="printStatsPage()">🖨️ طباعة الإحصائيات</button>
+                <button class="btn-orange no-print" style="margin-top: 8px; background-color: #2196f3;" onclick="downloadStatsPdf()">⬇️ تنزيل PDF</button>
             </div>
         </div>
 
@@ -910,6 +934,9 @@
             <div class="modal-buttons">
                 <button class="btn-modal-save no-print" onclick="printPeriodDetail()">🖨️ طباعة هذا الملخص</button>
                 <button class="btn-modal-cancel no-print" onclick="closePeriodDetailModal()">❌ إغلاق</button>
+            </div>
+            <div class="modal-buttons" style="margin-top: 0;">
+                <button class="btn-modal-save no-print" style="background-color: #2196f3;" onclick="downloadPeriodDetailPdf()">⬇️ تنزيل PDF</button>
             </div>
         </div>
     </div>
@@ -1494,6 +1521,12 @@
             window.print();
         }
 
+        // --- تنزيل ملخص فترة واحدة كملف PDF مباشرة (بديل عن الطباعة الفيزيائية) ---
+        function downloadPeriodDetailPdf() {
+            var titleText = document.getElementById("periodDetailTitle").innerText.replace(/[^\u0600-\u06FFa-zA-Z0-9 ]/g, "").trim();
+            generatePdfFromElement("periodDetailPrintArea", "ملخص_" + (titleText || "الفترة"));
+        }
+
         // بناء قائمة الصفوف المنسدلة بصفحة الإحصائيات (مرة واحدة عند فتح الصفحة، مع الحفاظ على الاختيار الحالي)
         function buildStatsGradeFilter() {
             var select = document.getElementById("statsGradeFilterSelect");
@@ -1648,9 +1681,70 @@
             container.innerHTML = html;
         }
 
+        // --- توليد ملف PDF من عنصر HTML معيّن بالصفحة، وتنزيله مباشرة (بدون الاعتماد على نظام طباعة الجهاز) ---
+        // elementId: العنصر المطلوب تحويله لصورة ثم لـ PDF
+        // fileName: اسم الملف الذي سيُنزّل (بدون امتداد .pdf، يُضاف تلقائياً)
+        function generatePdfFromElement(elementId, fileName) {
+            var element = document.getElementById(elementId);
+            if (!element) {
+                alert("❌ تعذّر العثور على المحتوى المطلوب تصديره.");
+                return;
+            }
+
+            if (typeof html2canvas === "undefined" || typeof jspdf === "undefined") {
+                alert("❌ تعذّر تحميل أدوات إنشاء PDF. تأكد من توفر اتصال بالإنترنت عند أول استخدام لهذه الميزة.");
+                return;
+            }
+
+            // إضافة كلاس مؤقت لإخفاء عناصر التحكم (الفلاتر، الأزرار) أثناء التصوير، مع إظهار خلفية بيضاء مناسبة للطباعة
+            element.classList.add("generating-pdf");
+
+            html2canvas(element, {
+                scale: 2, // دقة أعلى لوضوح أفضل بالملف الناتج
+                backgroundColor: "#ffffff",
+                useCORS: true
+            }).then(function (canvas) {
+                element.classList.remove("generating-pdf");
+
+                var imgData = canvas.toDataURL("image/png");
+                var jsPDF = window.jspdf.jsPDF;
+
+                // حساب أبعاد الصفحة بصيغة A4 عمودية، مع تحويل أبعاد الصورة لتتناسب مع عرض الصفحة
+                var pdf = new jsPDF("p", "mm", "a4");
+                var pageWidth = pdf.internal.pageSize.getWidth();
+                var pageHeight = pdf.internal.pageSize.getHeight();
+                var imgWidth = pageWidth;
+                var imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                var heightLeft = imgHeight;
+                var positionY = 0;
+
+                // إذا كان المحتوى أطول من صفحة واحدة، نقسّمه تلقائياً على عدة صفحات PDF
+                pdf.addImage(imgData, "PNG", 0, positionY, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft > 0) {
+                    positionY = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, "PNG", 0, positionY, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                pdf.save(fileName + ".pdf");
+            }).catch(function () {
+                element.classList.remove("generating-pdf");
+                alert("❌ حدث خطأ أثناء إنشاء ملف PDF. يرجى المحاولة مرة أخرى.");
+            });
+        }
+
         // --- طباعة محتوى صفحة الإحصائيات الحالي (جماعي أو لطالب محدد، بحسب الفلاتر المختارة) ---
         function printStatsPage() {
             window.print();
+        }
+
+        // --- تنزيل محتوى صفحة الإحصائيات الحالي كملف PDF مباشرة (بديل عن الطباعة الفيزيائية) ---
+        function downloadStatsPdf() {
+            generatePdfFromElement("statsPrintArea", "تقرير_الإحصائيات");
         }
 
         // --- دوال صفحة الأرشيف: عرض سجل الغياب المحفوظ لأي تاريخ سابق ---
