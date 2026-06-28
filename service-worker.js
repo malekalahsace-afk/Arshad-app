@@ -3,7 +3,7 @@
 
 // رقم نسخة الكاش - مهم جداً: كل مرة تحدّث الكود وترفع نسخة جديدة، يجب تغيير هذا الرقم
 // (مثلاً v1 -> v2) حتى يكتشف التطبيق وجود تحديث ويحمّل النسخة الجديدة.
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v8";
 const CACHE_NAME = "attendance-app-" + CACHE_VERSION;
 
 // قائمة كل الملفات الأساسية المطلوبة لعمل التطبيق بدون نت
@@ -20,7 +20,10 @@ const FILES_TO_CACHE = [
   "./icon-512.png",
   "./icon-512-maskable.png",
   // مكتبة SheetJS المستخدمة لتصدير/استيراد ملفات الإكسل (محمّلة من شبكة خارجية بالكود الأصلي)
-  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+  // مكتبتا html2canvas وjsPDF المستخدمتان لتوليد ملفات PDF مباشرة من محتوى الصفحة
+  "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
 ];
 
 // --- مرحلة التثبيت: تحميل وتخزين كل الملفات الأساسية بالكاش ---
