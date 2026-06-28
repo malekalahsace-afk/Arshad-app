@@ -714,7 +714,7 @@
                 <h3 style="margin-top:0; color:var(--primary-color);">سجل التلاميذ الكلي</h3>
                 
                 <div class="input-group" style="margin-bottom: 15px;">
-                    <select id="gradeFilterSelect" onchange="updateStudentsTable()">
+                    <select id="gradeFilterSelect" onchange="onGradeFilterChange()">
                         <option value="all">عرض جميع الصفوف</option>
                         <option value="الأول الابتدائي">الأول الابتدائي</option>
                         <option value="الثاني الابتدائي">الثاني الابتدائي</option>
@@ -722,6 +722,12 @@
                         <option value="الرابع الابتدائي">الرابع الابتدائي</option>
                         <option value="الخامس الابتدائي">الخامس الابتدائي</option>
                         <option value="السادس الابتدائي">السادس الابتدائي</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="sectionFilterGroup" style="margin-bottom: 15px; display: none;">
+                    <select id="sectionFilterSelect" onchange="updateStudentsTable()">
+                        <option value="all">عرض جميع الشعب</option>
                     </select>
                 </div>
                 
@@ -1250,7 +1256,7 @@
                     document.getElementById("menuStudents").classList.add("active");
                     document.getElementById("gradeFilterSelect").value = "all";
                     sortStudentsAlphabetically();
-                    updateStudentsTable();
+                    onGradeFilterChange();
                 } else if(page === 'attendance') {
                     document.getElementById("attendancePage").style.display = "block";
                     document.getElementById("attendanceTitle").innerText = "📋 سجل غياب: " + currentSelectedGrade;
@@ -1774,7 +1780,7 @@
                     sortStudentsAlphabetically(); 
                     localStorage.setItem("students", JSON.stringify(studentsList));
                     document.getElementById("gradeFilterSelect").value = "all";
-                    updateStudentsTable();
+                    onGradeFilterChange();
                     buildGradesSubmenu(); 
                     calculateStats();
                     alert("✅ تم استيراد وترتيب (" + importedCount + ") تلميذ بنجاح من ملف الإكسل!");
@@ -2195,28 +2201,83 @@
             alert("🗑️ تم حذف كل الطلاب وسجلات الغياب بنجاح.");
         }
 
+        // تُستدعى عند تغيير الصف المختار: تبني قائمة الشعب المتاحة فعلياً لهذا الصف، وتُحدّث الجدول
+        function onGradeFilterChange() {
+            var gradeFilterValue = document.getElementById("gradeFilterSelect").value;
+            var sectionGroup = document.getElementById("sectionFilterGroup");
+            var sectionSelect = document.getElementById("sectionFilterSelect");
+
+            if (gradeFilterValue === "all") {
+                // عرض جميع الصفوف: لا حاجة لفلتر الشعبة، نخفيه ونعيده لحالته الافتراضية
+                sectionGroup.style.display = "none";
+                sectionSelect.innerHTML = `<option value="all">عرض جميع الشعب</option>`;
+                updateStudentsTable();
+                return;
+            }
+
+            // جمع كل الشعب الموجودة فعلياً لطلاب هذا الصف بالتحديد (بدون تكرار)
+            var foundSections = [];
+            studentsList.forEach(function(student) {
+                if (!student.grade.startsWith(gradeFilterValue)) return;
+                var parts = student.grade.split(" - ");
+                var section = parts[1] ? parts[1].trim() : "";
+                if (section !== "" && foundSections.indexOf(section) === -1) {
+                    foundSections.push(section);
+                }
+            });
+
+            // ترتيب الشعب المعروضة بنفس ترتيب SECTION_ORDER المعتمد بالتطبيق (أ، ب، ج، د)
+            foundSections.sort(function(a, b) {
+                return SECTION_ORDER.indexOf(a) - SECTION_ORDER.indexOf(b);
+            });
+
+            if (foundSections.length > 0) {
+                sectionGroup.style.display = "block";
+                sectionSelect.innerHTML = `<option value="all">عرض جميع الشعب</option>` +
+                    foundSections.map(function(section) {
+                        return `<option value="${section}">شعبة ${section}</option>`;
+                    }).join("");
+            } else {
+                // الصف المختار ليس فيه أي شعب مسجّلة (طلاب بدون شعبة محددة)
+                sectionGroup.style.display = "none";
+                sectionSelect.innerHTML = `<option value="all">عرض جميع الشعب</option>`;
+            }
+
+            updateStudentsTable();
+        }
+
         function updateStudentsTable() {
             var tbody = document.getElementById("studentsTableBody");
             if(!tbody) return;
             
             tbody.innerHTML = "";
             var filterValue = document.getElementById("gradeFilterSelect").value;
+            var sectionFilterValue = document.getElementById("sectionFilterSelect") ? document.getElementById("sectionFilterSelect").value : "all";
             var displayedCount = 0;
 
             studentsList.forEach(function(student, index) {
-                if (filterValue === "all" || student.grade.includes(filterValue)) {
-                    displayedCount++;
-                    tbody.innerHTML += `<tr>
-                        <td>${student.name}</td>
-                        <td style="color: var(--primary-color);">${student.grade}</td>
-                        <td>
-                            <div class="action-cell">
-                                <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
-                                <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
-                            </div>
-                        </td>
-                    </tr>`;
+                // فحص تطابق الصف: مطابقة دقيقة لبداية النص (الصف نفسه، مع أو بدون شعبة بعده)
+                var matchesGrade = (filterValue === "all") || student.grade.startsWith(filterValue);
+                if (!matchesGrade) return;
+
+                // فحص تطابق الشعبة (فقط إذا كان فلتر الصف محدداً وفلتر الشعبة ليس "الكل")
+                if (filterValue !== "all" && sectionFilterValue !== "all") {
+                    var parts = student.grade.split(" - ");
+                    var studentSection = parts[1] ? parts[1].trim() : "";
+                    if (studentSection !== sectionFilterValue) return;
                 }
+
+                displayedCount++;
+                tbody.innerHTML += `<tr>
+                    <td>${student.name}</td>
+                    <td style="color: var(--primary-color);">${student.grade}</td>
+                    <td>
+                        <div class="action-cell">
+                            <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
+                            <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
+                        </div>
+                    </td>
+                </tr>`;
             });
             
             document.getElementById("totalCount").innerText = displayedCount;
