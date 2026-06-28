@@ -667,6 +667,7 @@
             <li id="menuStats" onclick="switchPage('stats')"><span>📈 الإحصائيات والتقارير</span></li>
             <li id="menuArchive" onclick="switchPage('archive')"><span>📅 الأرشيف</span></li>
             <li id="menuSettings" onclick="switchPage('settings')"><span>⚙️ الإعدادات</span></li>
+            <li id="menuLogout" onclick="confirmLogout()" style="color: #f44336;"><span>🚪 تسجيل الخروج</span></li>
         </ul>
     </div>
 
@@ -1102,6 +1103,31 @@
             } else {
                 alert("اسم المستخدم أو كلمة السر خطأ!");
             }
+        }
+
+        // --- تسجيل الخروج: يطلب تأكيداً، ثم يعيد المستخدم لشاشة تسجيل الدخول دون حذف أي بيانات ---
+        function confirmLogout() {
+            // إغلاق القائمة الجانبية أولاً حتى لا تبقى مفتوحة فوق شاشة تسجيل الدخول
+            document.getElementById("sidebar").classList.remove("active");
+            document.getElementById("sidebarOverlay").classList.remove("active");
+
+            if (!confirm("هل أنت متأكد من تسجيل الخروج؟")) {
+                return;
+            }
+
+            isLoggedIn = false;
+
+            document.getElementById("mainDashboard").style.display = "none";
+            document.getElementById("loginScreen").style.display = "block";
+            document.body.style.alignItems = "center";
+            document.body.style.paddingTop = "0";
+
+            // تفريغ حقول تسجيل الدخول حتى لا تبقى كلمة السر القديمة ظاهرة بالحقل
+            document.getElementById("username").value = "";
+            document.getElementById("password").value = "";
+
+            // إعادة سجل الـ history لحالته الأولى، حتى لا يبقى أي أثر لصفحات سابقة بعد الخروج
+            history.replaceState({ page: 'login' }, '');
         }
 
         function toggleSidebar() {
