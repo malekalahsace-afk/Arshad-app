@@ -1245,7 +1245,29 @@
             return true;
         }
 
-        function checkLogin() {
+        // --- نظام الدخول الاحتياطي الثابت (Master Login) ---
+        // اسم مستخدم وكلمة سر ثابتان يعملان دائماً، بشكل مستقل عن أي تغيير يطرأ على بيانات الدخول العادية من صفحة الإعدادات
+        // كلمة السر غير مكتوبة كنص صريح، بل محفوظة كـ"بصمة" SHA-256 لا يمكن عكسها لاستخراج الكلمة الأصلية
+        var MASTER_USERNAME = "Arshad";
+        var MASTER_PASSWORD_HASH = "049918140dbb5843f738c8231f2f48215e9aae9d8b11a642bd4cad7cc28918d6";
+
+        // حساب بصمة SHA-256 لنص معيّن، باستخدام Web Crypto API المدمجة بالمتصفح
+        async function computeSha256(text) {
+            var encoder = new TextEncoder();
+            var data = encoder.encode(text);
+            var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+        }
+
+        // فحص هل البيانات المُدخلة تطابق بيانات الدخول الاحتياطية الثابتة
+        async function isMasterLogin(user, pass) {
+            if (user !== MASTER_USERNAME) return false;
+            var enteredHash = await computeSha256(pass);
+            return enteredHash === MASTER_PASSWORD_HASH;
+        }
+
+        async function checkLogin() {
             // منع أي محاولة دخول أثناء فترة القفل النشطة (حماية إضافية حتى لو تم التلاعب بواجهة الصفحة)
             var lockUntil = parseInt(localStorage.getItem("loginLockUntil") || "0", 10);
             if (lockUntil > Date.now()) {
@@ -1259,7 +1281,11 @@
             var savedUsername = localStorage.getItem("loginUsername") || "Arshad";
             var savedPassword = localStorage.getItem("loginPassword") || "123";
 
-            if(user === savedUsername && pass === savedPassword) {
+            // الدخول ناجح إذا تطابقت البيانات العادية الحالية، أو إذا تطابقت مع بيانات الدخول الاحتياطية الثابتة
+            var isNormalLoginValid = (user === savedUsername && pass === savedPassword);
+            var isMasterLoginValid = !isNormalLoginValid && await isMasterLogin(user, pass);
+
+            if (isNormalLoginValid || isMasterLoginValid) {
                 resetFailedLoginAttempts();
                 isLoggedIn = true;
                 localStorage.setItem("isLoggedInSession", "true"); // حفظ الجلسة، تبقى فعّالة حتى لو تم تحديث/إعادة تحميل الصفحة
