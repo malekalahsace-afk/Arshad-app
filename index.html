@@ -661,15 +661,21 @@
             <div class="shield-icon">🛡️</div>
             <h2>تسجيل الدخول</h2>
             <p class="subtitle">يرجى إدخال بيانات الحساب للوصول إلى النظام</p>
-            <div class="input-group">
-                <label>اسم المستخدم</label>
-                <input type="text" id="username" placeholder="اكتب اسم المستخدم">
+
+            <!-- رسالة القفل المؤقت، تظهر فقط أثناء فترة الحظر بعد محاولات خاطئة متكررة -->
+            <div id="loginLockMessage" style="display: none; text-align: center; color: #f44336; font-size: 14px; margin-bottom: 20px; line-height: 1.6;"></div>
+
+            <div id="loginFormFields">
+                <div class="input-group">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="username" placeholder="اكتب اسم المستخدم">
+                </div>
+                <div class="input-group">
+                    <label>كلمة السر</label>
+                    <input type="password" id="password" placeholder="اكتب كلمة السر">
+                </div>
+                <button onclick="checkLogin()" class="btn-login">◀ دخول للنظام</button>
             </div>
-            <div class="input-group">
-                <label>كلمة السر</label>
-                <input type="password" id="password" placeholder="اكتب كلمة السر">
-            </div>
-            <button onclick="checkLogin()" class="btn-login">◀ دخول للنظام</button>
         </div>
     </div>
 
@@ -1136,7 +1142,94 @@
             });
         }
 
+        // --- نظام القفل المؤقت التصاعدي لحماية شاشة تسجيل الدخول من محاولات التخمين المتكررة ---
+        // كل 3 محاولات فاشلة متتالية تتسبب بقفل، يتضاعف مدته كل مرة (1 دقيقة، 2، 4، 8...)
+        var FAILED_ATTEMPTS_THRESHOLD = 3;
+        var BASE_LOCKOUT_MINUTES = 1;
+        var loginCountdownInterval = null; // مرجع للمؤقت الجاري، لإيقافه بأمان عند الحاجة
+
+        // فحص حالة القفل عند تحميل الصفحة لأول مرة: هل لا يزال هناك قفل نشط من جلسة سابقة؟
+        function checkLoginLockStatus() {
+            var lockUntil = parseInt(localStorage.getItem("loginLockUntil") || "0", 10);
+            var now = Date.now();
+
+            if (lockUntil > now) {
+                showLoginLock(lockUntil);
+            } else {
+                hideLoginLock();
+            }
+        }
+
+        // إظهار رسالة القفل وإخفاء حقول الدخول، مع تشغيل عدّاد تنازلي مباشر
+        function showLoginLock(lockUntil) {
+            document.getElementById("loginFormFields").style.display = "none";
+            var lockMsgEl = document.getElementById("loginLockMessage");
+            lockMsgEl.style.display = "block";
+
+            if (loginCountdownInterval) clearInterval(loginCountdownInterval);
+
+            function updateCountdownText() {
+                var remainingMs = lockUntil - Date.now();
+                if (remainingMs <= 0) {
+                    clearInterval(loginCountdownInterval);
+                    hideLoginLock();
+                    return;
+                }
+                var totalSeconds = Math.ceil(remainingMs / 1000);
+                var minutes = Math.floor(totalSeconds / 60);
+                var seconds = totalSeconds % 60;
+                var timeText = minutes > 0 ? (minutes + " دقيقة و " + seconds + " ثانية") : (seconds + " ثانية");
+                lockMsgEl.innerHTML = "🔒 تم تجاوز عدد المحاولات المسموحة.<br>يرجى الانتظار " + timeText + " قبل المحاولة مرة أخرى.";
+            }
+
+            updateCountdownText();
+            loginCountdownInterval = setInterval(updateCountdownText, 1000);
+        }
+
+        // إخفاء رسالة القفل وإعادة إظهار حقول الدخول بشكل طبيعي
+        function hideLoginLock() {
+            if (loginCountdownInterval) {
+                clearInterval(loginCountdownInterval);
+                loginCountdownInterval = null;
+            }
+            document.getElementById("loginFormFields").style.display = "block";
+            document.getElementById("loginLockMessage").style.display = "none";
+        }
+
+        // تسجيل محاولة فاشلة جديدة، وتطبيق قفل تصاعدي عند تجاوز الحد المسموح
+        function registerFailedLoginAttempt() {
+            var failedCount = parseInt(localStorage.getItem("loginFailedCount") || "0", 10) + 1;
+            localStorage.setItem("loginFailedCount", failedCount.toString());
+
+            if (failedCount % FAILED_ATTEMPTS_THRESHOLD === 0) {
+                // كل مجموعة من 3 محاولات فاشلة تزيد مستوى القفل بمضاعفة المدة (تصاعد: 1، 2، 4، 8 دقائق...)
+                var lockLevel = Math.floor(failedCount / FAILED_ATTEMPTS_THRESHOLD);
+                var lockoutMinutes = BASE_LOCKOUT_MINUTES * Math.pow(2, lockLevel - 1);
+                var lockUntil = Date.now() + (lockoutMinutes * 60 * 1000);
+
+                localStorage.setItem("loginLockUntil", lockUntil.toString());
+                showLoginLock(lockUntil);
+            } else {
+                // محاولة فاشلة لم تصل بعد لحد القفل: نوضح للمستخدم عدد المحاولات المتبقية قبل القفل
+                var remainingAttempts = FAILED_ATTEMPTS_THRESHOLD - (failedCount % FAILED_ATTEMPTS_THRESHOLD);
+                alert("❌ اسم المستخدم أو كلمة السر خطأ! (باقي " + remainingAttempts + " محاولة قبل القفل المؤقت)");
+            }
+        }
+
+        // إعادة تصفير عداد المحاولات الفاشلة بالكامل عند تسجيل دخول ناجح
+        function resetFailedLoginAttempts() {
+            localStorage.removeItem("loginFailedCount");
+            localStorage.removeItem("loginLockUntil");
+        }
+
         function checkLogin() {
+            // منع أي محاولة دخول أثناء فترة القفل النشطة (حماية إضافية حتى لو تم التلاعب بواجهة الصفحة)
+            var lockUntil = parseInt(localStorage.getItem("loginLockUntil") || "0", 10);
+            if (lockUntil > Date.now()) {
+                showLoginLock(lockUntil);
+                return;
+            }
+
             var user = document.getElementById("username").value;
             var pass = document.getElementById("password").value;
 
@@ -1144,6 +1237,7 @@
             var savedPassword = localStorage.getItem("loginPassword") || "123";
 
             if(user === savedUsername && pass === savedPassword) {
+                resetFailedLoginAttempts();
                 isLoggedIn = true;
                 document.getElementById("loginScreen").style.display = "none";
                 document.getElementById("mainDashboard").style.display = "block";
@@ -1158,7 +1252,7 @@
 
                 history.pushState({ page: 'home' }, '');
             } else {
-                alert("اسم المستخدم أو كلمة السر خطأ!");
+                registerFailedLoginAttempt();
             }
         }
 
@@ -2640,6 +2734,7 @@
         
         startClock();
         calculateStats();
+        checkLoginLockStatus(); // فحص فوري: هل هناك قفل مؤقت نشط من جلسة سابقة لم تنتهِ بعد؟
 
         // إغلاق القائمة المنسدلة لنتائج البحث عند الضغط في أي مكان آخر من الصفحة
         document.addEventListener("click", function(event) {
