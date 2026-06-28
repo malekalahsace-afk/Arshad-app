@@ -338,7 +338,7 @@
         }
         .theme-color-option {
             border-radius: 12px;
-            padding: 14px 8px;
+            padding: 8px;
             text-align: center;
             cursor: pointer;
             border: 2px solid #2d2d2d;
@@ -357,9 +357,8 @@
         }
         .theme-color-swatch {
             width: 100%;
-            height: 32px;
+            height: 48px;
             border-radius: 8px;
-            margin-bottom: 8px;
         }
 
         /* --- كروت ملخص الغياب حسب الفترة (اليوم/الأسبوع/الشهر/السنة) --- */
@@ -1077,12 +1076,12 @@
 
         // --- نظام تخصيص لون التطبيق: يطبّق فوراً عند تحميل الصفحة من آخر اختيار محفوظ ---
         var APP_THEME_COLORS = {
-            orange: { value: "#ff9800", label: "🟠 برتقالي" },
-            purple: { value: "#b39ddb", label: "🟣 بنفسجي فاتح" },
-            red:    { value: "#e53935", label: "🔴 أحمر" },
-            blue:   { value: "#64b5f6", label: "🔵 أزرق فاتح" },
-            green:  { value: "#81c784", label: "🟢 أخضر فاتح" },
-            yellow: { value: "#fdd835", label: "🟡 أصفر" }
+            orange: { value: "#ff9800", label: "" },
+            purple: { value: "#7e57c2", label: "" },
+            red:    { value: "#e53935", label: "" },
+            blue:   { value: "#64b5f6", label: "" },
+            green:  { value: "#43a047", label: "" },
+            yellow: { value: "#fdd835", label: "" }
         };
 
         function applyAppTheme(colorKey) {
@@ -1222,6 +1221,30 @@
             localStorage.removeItem("loginLockUntil");
         }
 
+        // --- استعادة الجلسة المحفوظة عند تحميل الصفحة (مثلاً بعد السحب للتحديث Pull-to-refresh) ---
+        // إذا كانت الجلسة لا تزال "مسجّلة دخول" من قبل، نتجاوز شاشة تسجيل الدخول مباشرة دون طلب كتابة البيانات مرة أخرى
+        // ترجع true إذا تمت استعادة الجلسة بنجاح، أو false إذا لم تكن هناك جلسة محفوظة (تبقى شاشة الدخول ظاهرة بشكل طبيعي)
+        function restoreLoginSessionIfActive() {
+            var hasActiveSession = localStorage.getItem("isLoggedInSession") === "true";
+            if (!hasActiveSession) return false;
+
+            isLoggedIn = true;
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("mainDashboard").style.display = "block";
+            document.body.style.alignItems = "flex-start";
+            document.body.style.paddingTop = "20px";
+
+            loadSchoolName();
+            sortStudentsAlphabetically();
+            updateStudentsTable();
+            buildGradesSubmenu();
+            calculateStats();
+
+            history.pushState({ page: 'home' }, '');
+
+            return true;
+        }
+
         function checkLogin() {
             // منع أي محاولة دخول أثناء فترة القفل النشطة (حماية إضافية حتى لو تم التلاعب بواجهة الصفحة)
             var lockUntil = parseInt(localStorage.getItem("loginLockUntil") || "0", 10);
@@ -1239,6 +1262,7 @@
             if(user === savedUsername && pass === savedPassword) {
                 resetFailedLoginAttempts();
                 isLoggedIn = true;
+                localStorage.setItem("isLoggedInSession", "true"); // حفظ الجلسة، تبقى فعّالة حتى لو تم تحديث/إعادة تحميل الصفحة
                 document.getElementById("loginScreen").style.display = "none";
                 document.getElementById("mainDashboard").style.display = "block";
                 document.body.style.alignItems = "flex-start";
@@ -1267,6 +1291,7 @@
             }
 
             isLoggedIn = false;
+            localStorage.removeItem("isLoggedInSession"); // مسح الجلسة المحفوظة فعلياً، حتى لا يُعاد فتح التطبيق تلقائياً بعد الخروج
 
             document.getElementById("mainDashboard").style.display = "none";
             document.getElementById("loginScreen").style.display = "block";
@@ -2310,7 +2335,7 @@
                 var theme = APP_THEME_COLORS[key];
                 var optionDiv = document.createElement("div");
                 optionDiv.className = "theme-color-option" + (key === currentColorKey ? " selected" : "");
-                optionDiv.innerHTML = `<div class="theme-color-swatch" style="background-color:${theme.value};"></div>${theme.label}`;
+                optionDiv.innerHTML = `<div class="theme-color-swatch" style="background-color:${theme.value};"></div>`;
                 optionDiv.onclick = function() {
                     applyAppTheme(key);
                     buildThemeColorGrid(); // إعادة البناء لتحديث الإطار المميز حول اللون المختار
@@ -2734,7 +2759,10 @@
         
         startClock();
         calculateStats();
-        checkLoginLockStatus(); // فحص فوري: هل هناك قفل مؤقت نشط من جلسة سابقة لم تنتهِ بعد؟
+        var sessionRestored = restoreLoginSessionIfActive(); // استعادة الجلسة المحفوظة إن وُجدت (تجنباً لإعادة طلب تسجيل الدخول بعد السحب للتحديث)
+        if (!sessionRestored) {
+            checkLoginLockStatus(); // فحص القفل المؤقت فقط إذا لم تكن هناك جلسة فعّالة بالأساس
+        }
 
         // إغلاق القائمة المنسدلة لنتائج البحث عند الضغط في أي مكان آخر من الصفحة
         document.addEventListener("click", function(event) {
