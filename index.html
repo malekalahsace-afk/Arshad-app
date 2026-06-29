@@ -29,10 +29,6 @@
         }
 
         /* --- الألوان والتصميم الداكن CSS --- */
-        html {
-            height: 100%;
-            overflow: hidden; /* منع أي تمرير أو "مط" (bounce) على مستوى الصفحة بأكملها */
-        }
         body {
             background-color: #121212;
             color: #ffffff;
@@ -41,21 +37,15 @@
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: stretch; /* يجب أن تكون stretch (لا center)، حتى تلتزم الحاوية الابن بقيمة height المحددة لها صراحة وتفعّل التمرير الداخلي بشكل صحيح */
-            height: 100%;
-            overflow: hidden; /* تثبيت الصفحة بالكامل؛ التمرير الفعلي يصير بداخل #appScrollArea فقط */
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            overscroll-behavior: none; /* تعطيل تأثير "السحب للتحديث" والمط على حواف الصفحة بالمتصفحات الداعمة */
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
         .login-container {
             width: 90%;
             max-width: clamp(400px, 55vw, 700px);
             text-align: center;
-            margin: auto; /* تمركز ذاتي عمودي وأفقي، يتجاوز align-items: stretch المحددة بالأب (body) */
         }
 
         .brand-name {
@@ -128,72 +118,25 @@
         .dashboard-container {
             width: 100%;
             max-width: clamp(480px, 65vw, 900px);
-            box-sizing: border-box;
-            position: relative;
-            height: 100vh; /* يشغل كامل ارتفاع الشاشة */
-            display: flex;
-            flex-direction: column; /* يقسم المساحة عمودياً: شريط ثابت بالأعلى، ومنطقة تمرير تأخذ الباقي */
-            overflow: hidden; /* التمرير الفعلي ينتقل بالكامل لمنطقة #scrollableContentArea بالداخل فقط */
-        }
-
-        /* --- منطقة الشريط الثابت بالأعلى: لا تتحرك أبداً، خارج نطاق التمرير بالكامل --- */
-        #fixedHeaderArea {
-            flex-shrink: 0; /* لا تنكمش أبداً بغض النظر عن طول المحتوى تحتها */
-        }
-
-        /* --- منطقة المحتوى القابلة للتمرير: تأخذ كل المساحة المتبقية تحت الشريط الثابت --- */
-        #scrollableContentArea {
-            flex: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
             padding: clamp(15px, 1.5vw, 25px);
             box-sizing: border-box;
+            position: relative;
         }
 
-        /* --- الشريط البرتقالي العلوي: أيقونة التطبيق + اسم المطوّر --- */
-        .developer-bar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background-color: var(--primary-color);
-            padding: 10px clamp(15px, 1.5vw, 25px);
-        }
-        .developer-bar-icon {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        .developer-bar-name {
-            color: #121212;
-            font-weight: bold;
-            font-size: 19px;
-        }
-
-        /* --- شريط اسم المدرسة: قبعة تخرج + الاسم + قلم التعديل + زر القائمة --- */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 10px;
-            background-color: #1a1a1a;
-            padding: 14px clamp(15px, 1.5vw, 25px);
-            border-bottom: 1px solid #2d2d2d;
-        }
-        .school-bar-cap {
-            font-size: 26px;
-            flex-shrink: 0;
+            margin-bottom: 20px;
         }
 
         .app-title {
             color: var(--primary-color);
-            font-size: 24px;
+            font-size: 22px;
             margin: 0;
             display: flex;
             align-items: center;
             gap: 6px;
-            flex: 1;
         }
 
         /* اسم المدرسة: قابل للضغط مباشرة لفتح التعديل */
@@ -757,25 +700,18 @@
     </div>
 
     <div id="mainDashboard" class="dashboard-container" style="display: none;">
-        <div id="fixedHeaderArea">
-            <div class="developer-bar">
-                <img src="icon-72.png" alt="أيقونة التطبيق" class="developer-bar-icon">
-                <span class="developer-bar-name">ارشد الگروشي</span>
-            </div>
-            <div class="top-bar">
-                <span class="school-bar-cap">🎓</span>
-                <h2 class="app-title">
-                    <span id="schoolNameText" class="editable-school-name" onclick="changeSchoolName()">الإدارة المدرسية</span>
-                    <svg class="edit-pencil-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M16.475 2.825a2.1 2.1 0 0 1 2.97 0l1.73 1.73a2.1 2.1 0 0 1 0 2.97L9.6 19a2 2 0 0 1-.99.55l-3.6.85a.7.7 0 0 1-.85-.85l.85-3.6a2 2 0 0 1 .55-.99L16.475 2.825z" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M14.5 4.8l3.7 3.7" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round"/>
-                    </svg>
-                </h2>
-                <span style="font-size:24px; cursor:pointer;" onclick="toggleSidebar()">☰</span>
-            </div>
+        <div class="top-bar">
+            <span style="font-size:24px; cursor:pointer;" onclick="toggleSidebar()">☰</span>
+            <h2 class="app-title">
+                <span id="schoolNameText" class="editable-school-name" onclick="changeSchoolName()">الإدارة المدرسية</span>
+                <svg class="edit-pencil-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16.475 2.825a2.1 2.1 0 0 1 2.97 0l1.73 1.73a2.1 2.1 0 0 1 0 2.97L9.6 19a2 2 0 0 1-.99.55l-3.6.85a.7.7 0 0 1-.85-.85l.85-3.6a2 2 0 0 1 .55-.99L16.475 2.825z" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M14.5 4.8l3.7 3.7" stroke="var(--primary-color)" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+            </h2>
+            <span style="font-weight:bold;">ارشد الگروشي</span>
         </div>
 
-        <div id="scrollableContentArea">
         <div class="search-box" style="position: relative;">
             <input type="text" id="searchInput" oninput="searchStudents()" onfocus="searchStudents()" placeholder="🔍 اكتب اسم التلميذ للبحث الفوري والفلترة...">
             <div id="searchResultsDropdown" class="search-results-dropdown"></div>
@@ -968,7 +904,6 @@
 
         </div>
 
-        </div>
     </div>
 
     <!-- --- واجهة منبثقة لاختيار الصف أو الشعبة عند الضغط على زر "تسجيل الغياب" --- -->
