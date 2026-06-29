@@ -41,7 +41,7 @@
             padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: stretch; /* يجب أن تكون stretch (لا center)، حتى تلتزم الحاوية الابن بقيمة height المحددة لها صراحة وتفعّل التمرير الداخلي بشكل صحيح */
             height: 100%;
             overflow: hidden; /* تثبيت الصفحة بالكامل؛ التمرير الفعلي يصير بداخل #appScrollArea فقط */
             position: fixed;
@@ -55,6 +55,7 @@
             width: 90%;
             max-width: clamp(400px, 55vw, 700px);
             text-align: center;
+            margin: auto; /* تمركز ذاتي عمودي وأفقي، يتجاوز align-items: stretch المحددة بالأب (body) */
         }
 
         .brand-name {
