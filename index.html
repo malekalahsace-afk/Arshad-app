@@ -2125,8 +2125,14 @@
                     var fullGradeInfo = studentSection !== "" ? (studentGrade + " - " + studentSection) : studentGrade;
 
                     if (studentName !== "") {
-                        studentsList.push({ name: studentName, grade: fullGradeInfo });
-                        importedCount++;
+                        window._dupNames=window._dupNames||[];
+                        var exists=studentsList.some(function(s){return (s.name||'').trim()===studentName && (s.grade||'').trim()===fullGradeInfo;});
+                        if(exists){
+                            window._dupNames.push(studentName+" - "+fullGradeInfo);
+                        }else{
+                            studentsList.push({ name: studentName, grade: fullGradeInfo });
+                            importedCount++;
+                        }
                     }
                 }
 
@@ -2137,7 +2143,12 @@
                     onGradeFilterChange();
                     buildGradesSubmenu(); 
                     calculateStats();
-                    alert("✅ تم استيراد وترتيب (" + importedCount + ") تلميذ بنجاح من ملف الإكسل!");
+                    var d=window._dupNames||[];
+var msg="";
+if(importedCount===0){msg="⚠️ لم يتم استيراد أي طالب جديد.\nجميع الأسماء موجودة مسبقًا.\nعدد المكررات: "+d.length;}
+else{msg="✅ تمت إضافة "+importedCount+" تلميذًا جديدًا.\n⚠️ تم تجاهل "+d.length+" اسمًا مكررًا.";
+if(d.length){msg+="\n\nالأسماء المكررة:\n"+d.slice(0,30).map(function(n,i){return (i+1)+"- "+n;}).join("\n"); if(d.length>30)msg+="\n... وتم تجاهل أسماء أخرى.";}}
+alert(msg);window._dupNames=[];
                 } else {
                     alert("❌ لم يتم العثور على أسماء تلاميذ صالحة داخل الملف.");
                 }
