@@ -2451,7 +2451,7 @@ alert(msg);window._dupNames=[];
             var versionLabel = document.getElementById("appVersionLabel");
             if (!versionLabel) return;
 
-            fetch("service-worker.js")
+            fetch("service-worker.js", { cache: "no-store" })
                 .then(function (response) {
                     if (!response.ok) throw new Error("فشل تحميل الملف");
                     return response.text();
@@ -2940,7 +2940,7 @@ alert(msg);window._dupNames=[];
         // --- تسجيل Service Worker: يفعّل عمل التطبيق بدون اتصال إنترنت بعد أول تحميل ---
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", function () {
-                navigator.serviceWorker.register("service-worker.js").then(function (registration) {
+                navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).then(function (registration) {
                     console.log("Service Worker تم تسجيله بنجاح:", registration.scope);
 
                     // مراقبة اكتشاف نسخة جديدة من الـ service worker أثناء وجود المستخدم بالصفحة
