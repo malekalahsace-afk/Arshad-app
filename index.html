@@ -520,6 +520,39 @@
             transform: scale(1.2);
         }
 
+        /* زر الثلاث نقاط (⋮) اللي يفتح نافذة إجراءات التلميذ */
+        .row-actions-trigger {
+            cursor: pointer;
+            font-size: 22px;
+            font-weight: bold;
+            color: #aaa;
+            padding: 6px 14px;
+            line-height: 1;
+        }
+        .row-actions-trigger:active { color: var(--primary-color); }
+
+        /* أزرار نافذة إجراءات التلميذ: كل إجراء بصف مستقل وبعرض كامل */
+        .student-action-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            background-color: #2a2a2a;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: right;
+            text-decoration: none;
+        }
+        .student-action-btn .icon { font-size: 20px; }
+        .student-action-btn.delete { color: #f44336; }
+        .student-action-btn.disabled { opacity: 0.4; pointer-events: none; }
+
         /* خيارات أزرار الغياب والحضور */
         .attendance-cell-container {
             display: flex;
@@ -1128,6 +1161,19 @@
             <div class="modal-buttons">
                 <button class="btn-modal-save" onclick="saveStudentNotes()">💾 حفظ الملاحظة</button>
                 <button class="btn-modal-cancel" onclick="closeNotesModal()">❌ إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة إجراءات التلميذ: تفتح بالضغط على زر ⋮ بقائمة التلاميذ، وتجمع كل الإجراءات بمكان وحد -->
+    <div id="studentActionsModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="studentActionsModalTitle">إجراءات التلميذ</h3>
+
+            <div id="studentActionsButtonsBox"></div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-cancel" onclick="closeStudentActionsModal()">❌ إغلاق</button>
             </div>
         </div>
     </div>
@@ -2361,6 +2407,36 @@ alert(msg);window._dupNames=[];
             notesEditIndex = -1;
         }
 
+        // --- نافذة إجراءات التلميذ (⋮): تجمع الملاحظات/التعديل/الحذف/واتساب بمكان وحد بدل ازدحام الصف ---
+        function openStudentActionsModal(index) {
+            var student = studentsList[index];
+            if (!student) return;
+
+            document.getElementById("studentActionsModalTitle").innerText = "إجراءات: " + student.name;
+
+            var hasNotes = student.notes && student.notes.trim() !== "";
+            var notesLabel = hasNotes ? "عرض / تعديل الملاحظة" : "إضافة ملاحظة";
+
+            var waLink = buildWhatsappLink(student, buildGeneralWhatsappMessage(student));
+            var whatsappButtonHtml = waLink
+                ? `<a href="${waLink}" target="_blank" class="student-action-btn" onclick="closeStudentActionsModal()"><span class="icon">📱</span> مراسلة ولي الأمر على واتساب</a>`
+                : `<div class="student-action-btn disabled"><span class="icon">📵</span> لا يوجد رقم هاتف محفوظ</div>`;
+
+            var box = document.getElementById("studentActionsButtonsBox");
+            box.innerHTML = `
+                <button class="student-action-btn" onclick="closeStudentActionsModal(); openNotesModal(${index});"><span class="icon">📝</span> ${notesLabel}</button>
+                <button class="student-action-btn" onclick="closeStudentActionsModal(); openEditStudentModal(${index});"><span class="icon">✏️</span> تعديل بيانات التلميذ</button>
+                ${whatsappButtonHtml}
+                <button class="student-action-btn delete" onclick="closeStudentActionsModal(); deleteStudent(${index});"><span class="icon">🗑️</span> حذف التلميذ نهائياً</button>
+            `;
+
+            document.getElementById("studentActionsModal").classList.add("active");
+        }
+
+        function closeStudentActionsModal() {
+            document.getElementById("studentActionsModal").classList.remove("active");
+        }
+
         function saveStudentData() {
             var name = document.getElementById("modalStudentName").value.trim();
             var grade = document.getElementById("modalStudentGrade").value;
@@ -2994,23 +3070,13 @@ alert(msg);window._dupNames=[];
                 }
 
                 displayedCount++;
-                var hasNotes = student.notes && student.notes.trim() !== "";
-                var notesIconColor = hasNotes ? "color: #ffc107;" : "";
-
-                var waLink = buildWhatsappLink(student, buildGeneralWhatsappMessage(student));
-                var whatsappIcon = waLink
-                    ? `<a href="${waLink}" target="_blank" title="مراسلة ولي الأمر على واتساب" style="text-decoration:none;">📱</a>`
-                    : `<span title="لا يوجد رقم هاتف محفوظ" style="opacity: 0.35;">📵</span>`;
 
                 tbody.innerHTML += `<tr>
                     <td>${student.name}</td>
                     <td style="color: var(--primary-color);">${student.grade}</td>
                     <td>
                         <div class="action-cell">
-                            <span title="ملاحظات" style="${notesIconColor}" onclick="openNotesModal(${index})">📝</span>
-                            <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
-                            <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
-                            ${whatsappIcon}
+                            <span class="row-actions-trigger" title="الإجراءات" onclick="openStudentActionsModal(${index})">⋮</span>
                         </div>
                     </td>
                 </tr>`;
