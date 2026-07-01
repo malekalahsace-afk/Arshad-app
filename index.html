@@ -1518,6 +1518,13 @@
             return result;
         }
 
+        // يتحقق فيما إذا تم تسجيل غياب اليوم بالكامل لكل تلاميذ صف/شعبة معيّنة
+        function isGradeAttendanceDoneToday(gradeName) {
+            var studentsInGrade = studentsList.filter(function(s) { return s.grade.trim() === gradeName.trim(); });
+            if (studentsInGrade.length === 0) return false;
+            return studentsInGrade.every(function(s) { return attendanceToday.hasOwnProperty(s.name); });
+        }
+
         function buildGradesSubmenu() {
             var submenu = document.getElementById("gradesSubmenu");
             if(!submenu) return;
@@ -1527,7 +1534,8 @@
             
             activeGrades.forEach(function(gradeName) {
                 var li = document.createElement("li");
-                li.innerText = "🔹 " + gradeName;
+                var doneLabel = isGradeAttendanceDoneToday(gradeName) ? ' <span style="color:#4caf50; font-size:11px;">(✅ تم)</span>' : '';
+                li.innerHTML = "🔹 " + gradeName + doneLabel;
                 li.onclick = function() {
                     closeGradesSubmenu(); 
                     switchPage('attendance', false, gradeName);
@@ -1567,7 +1575,7 @@
             activeGrades.forEach(function(gradeName) {
                 var option = document.createElement("option");
                 option.value = gradeName;
-                option.innerText = gradeName;
+                option.innerText = isGradeAttendanceDoneToday(gradeName) ? (gradeName + " ✅ (تم)") : gradeName;
                 select.appendChild(option);
             });
 
