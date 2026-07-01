@@ -323,6 +323,24 @@
         }
         .alert-student-row:last-child { border-bottom: none; }
         .alert-student-row .grade-tag { color: #aaa; font-size: 12px; }
+        .whatsapp-alert-btn {
+            background-color: #25D366;
+            color: #000;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 20px;
+            text-decoration: none;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .whatsapp-alert-btn:active { opacity: 0.8; }
+        .alert-no-phone {
+            color: #666;
+            font-size: 11px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
         .alert-empty-message {
             color: #888;
             font-size: 13px;
@@ -945,6 +963,18 @@
 
                 <input type="file" id="backupFileInput" accept=".xlsx, .xls" style="display: none;" onchange="handleBackupImport(event)">
                 <button class="btn-orange" style="background-color: #2196f3;" onclick="document.getElementById('backupFileInput').click()">⬆️ استيراد نسخة احتياطية</button>
+            </div>
+
+            <!-- النسخ الاحتياطي التلقائي على Google Drive -->
+            <!-- مخفي مؤقتاً (display: none) لين يتوفر Google Client ID صحيح — الكود جاهز بالكامل وما يحتاج أي تعديل غير حذف display:none -->
+            <div class="reports-card" style="display: none;">
+                <h3 style="margin-top: 0; color: var(--primary-color); border-bottom: 1px solid #333; padding-bottom: 10px;">☁️ نسخة احتياطية على Google Drive</h3>
+                <p style="font-size: 13px; color: #aaa; margin-bottom: 5px;">يحتاج اتصال بالإنترنت فقط لحظة الرفع أو الاستعادة. باقي التطبيق يستمر يشتغل بدون نت كالمعتاد.</p>
+                <p id="driveStatusLabel" style="font-size: 12px; color: #888; margin-bottom: 15px;">غير متصل بحساب Google</p>
+
+                <button id="driveConnectBtn" class="btn-orange" style="background-color: #4285F4;" onclick="connectGoogleDrive()">🔗 ربط حساب Google Drive</button>
+                <button id="driveBackupBtn" class="btn-orange" style="background-color: #34A853; margin-top: 8px;" onclick="backupToDrive()" disabled>⬆️ أخذ نسخة احتياطية الآن</button>
+                <button id="driveRestoreBtn" class="btn-orange" style="background-color: #FBBC05; color:#000; margin-top: 8px;" onclick="restoreFromDrive()" disabled>⬇️ استعادة آخر نسخة من Drive</button>
             </div>
 
             <!-- حذف كل البيانات -->
@@ -1920,6 +1950,50 @@
             return countsByStudent;
         }
 
+        // --- إرسال رسائل واتساب لأولياء الأمور (تُستخدم من صفحة قائمة التلاميذ وصفحة تقارير الغياب) ---
+        // رمز الدولة الدولي؛ يُستخدم لتحويل الأرقام المحلية (تبدأ بصفر) لصيغة دولية يفهمها واتساب
+        var WHATSAPP_COUNTRY_CODE = "964"; // العراق
+
+        // تحويل رقم الهاتف المحلي (مثل 07701234567) لصيغة دولية بدون رموز (9647701234567)
+        function formatPhoneForWhatsApp(phone) {
+            if (!phone) return null;
+            var digits = phone.toString().replace(/[^\d]/g, "");
+            if (digits.length === 0) return null;
+
+            if (digits.indexOf(WHATSAPP_COUNTRY_CODE) === 0) {
+                return digits; // الرقم مكتوب أصلاً بصيغة دولية
+            }
+            if (digits.charAt(0) === "0") {
+                return WHATSAPP_COUNTRY_CODE + digits.substring(1); // إزالة الصفر المحلي واستبداله برمز الدولة
+            }
+            return WHATSAPP_COUNTRY_CODE + digits;
+        }
+
+        // بناء رابط واتساب جاهز (wa.me) لطالب معيّن مع نص رسالة محدد؛ يرجع null إذا ماكو رقم صالح
+        function buildWhatsappLink(student, message) {
+            var waNumber = formatPhoneForWhatsApp(student.phone);
+            if (!waNumber) return null;
+            return "https://wa.me/" + waNumber + "?text=" + encodeURIComponent(message);
+        }
+
+        // نص رسالة تنبيه تجاوز حد الغياب
+        function buildAbsenceWhatsappMessage(student, count) {
+            var schoolName = localStorage.getItem("schoolName") || "الإدارة المدرسية";
+            return "السلام عليكم ورحمة الله،\n" +
+                "نود إعلامكم بأن الطالب/ـة (" + student.name + ") بلغ عدد أيام غيابه الفعلي (" + count + ") يوماً خلال العام الدراسي الحالي.\n" +
+                "نرجو التكرم بالمتابعة والتواصل مع " + schoolName + " عند الإمكان.\n" +
+                "مع خالص التحية.";
+        }
+
+        // نص رسالة تواصل عامة (تُستخدم من صفحة قائمة التلاميذ، بدون ربطها بعدد غياب معيّن)
+        function buildGeneralWhatsappMessage(student) {
+            var schoolName = localStorage.getItem("schoolName") || "الإدارة المدرسية";
+            return "السلام عليكم ورحمة الله،\n" +
+                "نتواصل معكم من " + schoolName + " بخصوص الطالب/ـة (" + student.name + ").\n" +
+                "نرجو التكرم بالرد عند الإمكان.\n" +
+                "مع خالص التحية.";
+        }
+
         // بناء قائمة إنذارات الغياب: طلاب بمستوى تحذيري (أصفر) وطلاب بمستوى خطر (أحمر)
         function buildAbsenceAlerts() {
             var container = document.getElementById("absenceAlertsBox");
@@ -1944,9 +2018,17 @@
             warningStudents.sort(function(a, b) { return b.count - a.count; });
 
             function renderAlertRow(item) {
+                var extraHtml;
+                var waLink = buildWhatsappLink(item.student, buildAbsenceWhatsappMessage(item.student, item.count));
+                if (waLink) {
+                    extraHtml = `<a href="${waLink}" target="_blank" class="whatsapp-alert-btn">📱 واتساب</a>`;
+                } else {
+                    extraHtml = `<span class="alert-no-phone">لا يوجد رقم</span>`;
+                }
                 return `<div class="alert-student-row">
                     <span>👤 ${item.student.name} <span class="grade-tag">(${item.student.grade || '-'})</span></span>
                     <strong>${item.count} يوم</strong>
+                    ${extraHtml}
                 </div>`;
             }
 
@@ -2444,6 +2526,178 @@ alert(msg);window._dupNames=[];
 
             buildThemeColorGrid();
             loadAppVersion();
+            refreshDriveStatusLabel();
+        }
+
+        // ================== النسخ الاحتياطي على Google Drive ==================
+        // ملاحظة مهمة: هذا القسم اختياري بالكامل ولا يؤثر على عمل التطبيق بدون انترنت.
+        // التطبيق الأساسي (تسجيل الحضور، الإحصائيات، ...) يستمر يشتغل offline كالسابق تماماً.
+        // الاتصال بالنت مطلوب فقط لحظة الضغط على "ربط الحساب" أو "نسخة احتياطية" أو "استعادة".
+
+        // ⚠️ لازم تستبدل القيمة أدناه بمعرف العميل (Client ID) الخاص بمشروعك من Google Cloud Console
+        // الخطوات: console.cloud.google.com -> إنشاء مشروع -> APIs & Services -> Credentials
+        // -> Create Credentials -> OAuth Client ID -> Web Application
+        // -> أضف رابط موقعك (مثلاً https://your-domain.com) ضمن Authorized JavaScript origins
+        var GOOGLE_CLIENT_ID = "ضع_معرف_العميل_هنا.apps.googleusercontent.com";
+
+        // صلاحية drive.file: التطبيق يوصل بس للملفات اللي هو نفسه أنشأها، ماكو وصول لباقي ملفاتك بالـ Drive
+        var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+        var DRIVE_BACKUP_FILENAME = "attendance-app-backup.json";
+
+        var driveAccessToken = null;
+        var driveTokenClient = null;
+        var driveGisReady = false;
+
+        // تُستدعى تلقائياً بعد تحميل مكتبة Google Identity Services (راجع سطر تحميل السكربت بالأسفل)
+        function onGisLoaded() {
+            if (typeof google === "undefined" || !google.accounts) return;
+            driveGisReady = true;
+            driveTokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: function (tokenResponse) {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        driveAccessToken = tokenResponse.access_token;
+                        document.getElementById("driveBackupBtn").disabled = false;
+                        document.getElementById("driveRestoreBtn").disabled = false;
+                        refreshDriveStatusLabel("متصل بحساب Google ✔️");
+                    }
+                }
+            });
+        }
+
+        function refreshDriveStatusLabel(overrideText) {
+            var el = document.getElementById("driveStatusLabel");
+            if (!el) return;
+            if (overrideText) { el.innerText = overrideText; return; }
+
+            var lastBackup = localStorage.getItem("lastDriveBackupTime");
+            if (driveAccessToken && lastBackup) {
+                el.innerText = "متصل — آخر نسخة احتياطية: " + new Date(lastBackup).toLocaleString("ar-IQ");
+            } else if (driveAccessToken) {
+                el.innerText = "متصل بحساب Google ✔️ (ماكو نسخة احتياطية مأخوذة بعد)";
+            } else if (lastBackup) {
+                el.innerText = "غير متصل حالياً — آخر نسخة احتياطية: " + new Date(lastBackup).toLocaleString("ar-IQ");
+            } else {
+                el.innerText = "غير متصل بحساب Google";
+            }
+        }
+
+        function connectGoogleDrive() {
+            if (!navigator.onLine) {
+                alert("تحتاج اتصال بالإنترنت للربط مع Google Drive.");
+                return;
+            }
+            if (GOOGLE_CLIENT_ID.indexOf("ضع_معرف_العميل_هنا") !== -1) {
+                alert("لازم أولاً تضيف معرف Google Client ID الخاص بمشروعك بالكود قبل استخدام هذي الميزة.");
+                return;
+            }
+            if (!driveGisReady || !driveTokenClient) {
+                alert("مكتبة Google لم تُحمّل بعد، تأكد من اتصالك بالإنترنت وحاول مرة أخرى بعد ثوانٍ.");
+                return;
+            }
+            driveTokenClient.requestAccessToken();
+        }
+
+        // تجميع بيانات النسخة الاحتياطية من نفس المتغيرات المستخدمة بباقي التطبيق
+        function gatherDriveBackupData() {
+            return {
+                backupDate: new Date().toISOString(),
+                schoolName: localStorage.getItem("schoolName") || "",
+                students: studentsList,
+                attendanceByDate: attendanceByDate
+            };
+            // نتعمد عدم تضمين اسم المستخدم/كلمة السر بالنسخة الاحتياطية لأسباب أمنية
+        }
+
+        // البحث عن ملف النسخة الاحتياطية السابق بحساب Drive (إن وجد) لتحديثه بدل إنشاء نسخ مكررة
+        async function findExistingDriveBackupFileId() {
+            var url = "https://www.googleapis.com/drive/v3/files?q=" +
+                encodeURIComponent("name='" + DRIVE_BACKUP_FILENAME + "' and trashed=false") +
+                "&spaces=drive&fields=files(id,name,modifiedTime)";
+            var res = await fetch(url, { headers: { Authorization: "Bearer " + driveAccessToken } });
+            if (!res.ok) throw new Error("فشل البحث عن الملف");
+            var data = await res.json();
+            return (data.files && data.files.length > 0) ? data.files[0].id : null;
+        }
+
+        async function backupToDrive() {
+            if (!navigator.onLine) { alert("تحتاج اتصال بالإنترنت لأخذ نسخة احتياطية."); return; }
+            if (!driveAccessToken) { alert("اربط حسابك بـ Google Drive أولاً."); return; }
+
+            refreshDriveStatusLabel("جاري رفع النسخة الاحتياطية...");
+            try {
+                var fileContent = JSON.stringify(gatherDriveBackupData(), null, 2);
+                var existingId = await findExistingDriveBackupFileId();
+
+                var boundary = "-------314159265358979323846";
+                var metadataPart = existingId ? {} : { name: DRIVE_BACKUP_FILENAME, mimeType: "application/json" };
+                var body =
+                    "--" + boundary + "\r\n" +
+                    "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+                    JSON.stringify(metadataPart) + "\r\n" +
+                    "--" + boundary + "\r\n" +
+                    "Content-Type: application/json\r\n\r\n" +
+                    fileContent + "\r\n" +
+                    "--" + boundary + "--";
+
+                var uploadUrl = existingId
+                    ? "https://www.googleapis.com/upload/drive/v3/files/" + existingId + "?uploadType=multipart"
+                    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+
+                var res = await fetch(uploadUrl, {
+                    method: existingId ? "PATCH" : "POST",
+                    headers: {
+                        Authorization: "Bearer " + driveAccessToken,
+                        "Content-Type": "multipart/related; boundary=" + boundary
+                    },
+                    body: body
+                });
+                if (!res.ok) throw new Error("فشل الرفع");
+
+                localStorage.setItem("lastDriveBackupTime", new Date().toISOString());
+                refreshDriveStatusLabel();
+                alert("✔️ تم أخذ النسخة الاحتياطية على Google Drive بنجاح.");
+            } catch (err) {
+                console.error(err);
+                refreshDriveStatusLabel("فشل أخذ النسخة الاحتياطية");
+                alert("صار خطأ أثناء الرفع، تأكد من اتصالك بالإنترنت وحاول مرة أخرى.");
+            }
+        }
+
+        async function restoreFromDrive() {
+            if (!navigator.onLine) { alert("تحتاج اتصال بالإنترنت للاستعادة."); return; }
+            if (!driveAccessToken) { alert("اربط حسابك بـ Google Drive أولاً."); return; }
+            if (!confirm("⚠️ هذا الإجراء بيستبدل كل بيانات التلاميذ وسجلات الغياب الحالية بالنسخة المحفوظة على Google Drive. متأكد؟")) return;
+
+            refreshDriveStatusLabel("جاري الاستعادة...");
+            try {
+                var fileId = await findExistingDriveBackupFileId();
+                if (!fileId) { alert("ماكو نسخة احتياطية محفوظة على Google Drive بعد."); refreshDriveStatusLabel(); return; }
+
+                var res = await fetch("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media", {
+                    headers: { Authorization: "Bearer " + driveAccessToken }
+                });
+                if (!res.ok) throw new Error("فشل التحميل");
+                var backupData = await res.json();
+
+                studentsList = backupData.students || [];
+                localStorage.setItem("students", JSON.stringify(studentsList));
+
+                attendanceByDate = backupData.attendanceByDate || {};
+                if (!attendanceByDate[TODAY_KEY]) attendanceByDate[TODAY_KEY] = {};
+                attendanceToday = attendanceByDate[TODAY_KEY];
+                localStorage.setItem("attendanceByDate", JSON.stringify(attendanceByDate));
+
+                if (backupData.schoolName) localStorage.setItem("schoolName", backupData.schoolName);
+
+                alert("✔️ تمت الاستعادة بنجاح. راح تنعاد الصفحة الآن.");
+                window.location.reload();
+            } catch (err) {
+                console.error(err);
+                refreshDriveStatusLabel("فشلت الاستعادة");
+                alert("صار خطأ أثناء الاستعادة، حاول مرة أخرى.");
+            }
         }
 
         // --- جلب رقم نسخة التطبيق الحالية مباشرة من ملف service-worker.js وعرضه بصفحة الإعدادات ---
@@ -2742,6 +2996,12 @@ alert(msg);window._dupNames=[];
                 displayedCount++;
                 var hasNotes = student.notes && student.notes.trim() !== "";
                 var notesIconColor = hasNotes ? "color: #ffc107;" : "";
+
+                var waLink = buildWhatsappLink(student, buildGeneralWhatsappMessage(student));
+                var whatsappIcon = waLink
+                    ? `<a href="${waLink}" target="_blank" title="مراسلة ولي الأمر على واتساب" style="text-decoration:none;">📱</a>`
+                    : `<span title="لا يوجد رقم هاتف محفوظ" style="opacity: 0.35;">📵</span>`;
+
                 tbody.innerHTML += `<tr>
                     <td>${student.name}</td>
                     <td style="color: var(--primary-color);">${student.grade}</td>
@@ -2750,6 +3010,7 @@ alert(msg);window._dupNames=[];
                             <span title="ملاحظات" style="${notesIconColor}" onclick="openNotesModal(${index})">📝</span>
                             <span title="تعديل" onclick="openEditStudentModal(${index})">✏️</span>
                             <span title="حذف" onclick="deleteStudent(${index})">🗑️</span>
+                            ${whatsappIcon}
                         </div>
                     </td>
                 </tr>`;
@@ -2961,5 +3222,8 @@ alert(msg);window._dupNames=[];
             });
         }
     </script>
+    <!-- مكتبة Google Identity Services: تُستخدم فقط لربط حساب Google Drive للنسخ الاحتياطي، تحميلها اختياري ولا تمنع عمل التطبيق بدون انترنت -->
+    <script src="https://accounts.google.com/gsi/client" async defer onload="onGisLoaded()"></script>
+
 </body>
 </html>
