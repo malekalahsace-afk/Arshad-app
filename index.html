@@ -2026,7 +2026,7 @@
         function buildAbsenceWhatsappMessage(student, count) {
             var schoolName = localStorage.getItem("schoolName") || "الإدارة المدرسية";
             return "السلام عليكم ورحمة الله،\n" +
-                "نود إعلامكم بأن الطالب/ـة (" + student.name + ") بلغ عدد أيام غيابه الفعلي (" + count + ") يوماً خلال العام الدراسي الحالي.\n" +
+                "نود إعلامكم بأن التلميذ (" + student.name + ") بلغ عدد أيام غيابه الفعلي (" + count + ") يوماً خلال العام الدراسي الحالي.\n" +
                 "نرجو التكرم بالمتابعة والتواصل مع " + schoolName + " عند الإمكان.\n" +
                 "مع خالص التحية.";
         }
@@ -2035,7 +2035,7 @@
         function buildGeneralWhatsappMessage(student) {
             var schoolName = localStorage.getItem("schoolName") || "الإدارة المدرسية";
             return "السلام عليكم ورحمة الله،\n" +
-                "نتواصل معكم من " + schoolName + " بخصوص الطالب/ـة (" + student.name + ").\n" +
+                "نتواصل معكم من " + schoolName + " بخصوص التلميذ (" + student.name + ").\n" +
                 "نرجو التكرم بالرد عند الإمكان.\n" +
                 "مع خالص التحية.";
         }
@@ -2419,7 +2419,7 @@ alert(msg);window._dupNames=[];
 
             var waLink = buildWhatsappLink(student, buildGeneralWhatsappMessage(student));
             var whatsappButtonHtml = waLink
-                ? `<a href="${waLink}" target="_blank" class="student-action-btn" onclick="closeStudentActionsModal()"><span class="icon">📱</span> مراسلة ولي الأمر على واتساب</a>`
+                ? `<button class="student-action-btn" onclick="closeStudentActionsModal(); window.open('${waLink}', '_blank');"><span class="icon">📱</span> مراسلة ولي الأمر على واتساب</button>`
                 : `<div class="student-action-btn disabled"><span class="icon">📵</span> لا يوجد رقم هاتف محفوظ</div>`;
 
             var box = document.getElementById("studentActionsButtonsBox");
