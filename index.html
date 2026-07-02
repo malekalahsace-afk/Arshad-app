@@ -1178,6 +1178,21 @@
         </div>
     </div>
 
+    <!-- نافذة تنبيه تلقائي: تلاميذ جدد وصلوا لعتبة الغياب التحذيرية/الخطرة -->
+    <div id="absenceThresholdPopupModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="color: #ff9800;">⚠️ تنبيه غياب متكرر</h3>
+            <p style="font-size: 13px; color: #aaa; margin-top: -10px; margin-bottom: 15px;">التلاميذ التاليون وصل غيابهم الفعلي لعتبة تستوجب المتابعة:</p>
+
+            <div id="absenceThresholdPopupBody" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px;"></div>
+
+            <div class="modal-buttons">
+                <button class="btn-modal-save" onclick="goToReportsFromPopup()">📋 عرض التفاصيل بالتقارير</button>
+                <button class="btn-modal-cancel" onclick="closeAbsenceThresholdPopup()">❌ إغلاق</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         var studentsList = JSON.parse(localStorage.getItem("students")) || [];
 
@@ -1384,6 +1399,7 @@
             updateStudentsTable();
             buildGradesSubmenu();
             calculateStats();
+            checkNewAbsenceThresholdNotifications();
 
             history.pushState({ page: 'home' }, '');
 
@@ -1444,6 +1460,7 @@
                 updateStudentsTable();
                 buildGradesSubmenu(); 
                 calculateStats();
+                checkNewAbsenceThresholdNotifications();
 
                 history.pushState({ page: 'home' }, '');
             } else {
@@ -2002,6 +2019,60 @@
                 });
             });
             return countsByStudent;
+        }
+
+        // --- تنبيه تلقائي للإدارة عند وصول تلميذ جديد لعتبة الغياب (10 أيام فأكثر) ---
+        // يُستدعى تلقائياً عند فتح التطبيق (تسجيل دخول عادي أو استعادة جلسة سابقة)
+        // نحفظ آخر مستوى تم التبليغ عنه لكل تلميذ، حتى لا يتكرر نفس التنبيه بكل مرة يفتح فيها التطبيق
+        function checkNewAbsenceThresholdNotifications() {
+            var counts = getYearlyAbsentCounts();
+            var notifiedLevels = JSON.parse(localStorage.getItem("notifiedAbsenceThresholds") || "{}");
+            var newAlerts = [];
+
+            studentsList.forEach(function(student) {
+                var count = counts[student.name] || 0;
+                if (count < ABSENCE_ALERT_WARNING_THRESHOLD) return;
+
+                var level = (count >= ABSENCE_ALERT_DANGER_THRESHOLD) ? "danger" : "warning";
+                var previousLevel = notifiedLevels[student.name];
+
+                // نبلغ فقط عند: أول مرة يعبر فيها التلميذ العتبة، أو عند ترقيته من "تحذيري" إلى "خطر"
+                if (!previousLevel || (previousLevel === "warning" && level === "danger")) {
+                    newAlerts.push({ student: student, count: count, level: level });
+                    notifiedLevels[student.name] = level;
+                }
+            });
+
+            if (newAlerts.length > 0) {
+                localStorage.setItem("notifiedAbsenceThresholds", JSON.stringify(notifiedLevels));
+                showAbsenceThresholdPopup(newAlerts);
+            }
+        }
+
+        // عرض نافذة التنبيه التلقائي بقائمة التلاميذ الجدد اللي عبروا العتبة
+        function showAbsenceThresholdPopup(newAlerts) {
+            newAlerts.sort(function(a, b) { return b.count - a.count; });
+
+            var rowsHtml = newAlerts.map(function(item) {
+                var icon = item.level === "danger" ? "🔴" : "🟡";
+                return `<div class="alert-student-row">
+                    <span>${icon} ${item.student.name} <span class="grade-tag">(${item.student.grade || '-'})</span></span>
+                    <strong>${item.count} يوم</strong>
+                </div>`;
+            }).join("");
+
+            document.getElementById("absenceThresholdPopupBody").innerHTML = rowsHtml;
+            document.getElementById("absenceThresholdPopupModal").classList.add("active");
+        }
+
+        function closeAbsenceThresholdPopup() {
+            document.getElementById("absenceThresholdPopupModal").classList.remove("active");
+        }
+
+        // فتح صفحة التقارير مباشرة من داخل نافذة التنبيه (لمتابعة التفاصيل أو مراسلة أولياء الأمور)
+        function goToReportsFromPopup() {
+            closeAbsenceThresholdPopup();
+            switchPage('stats');
         }
 
         // --- إرسال رسائل واتساب لأولياء الأمور (تُستخدم من صفحة قائمة التلاميذ وصفحة تقارير الغياب) ---
