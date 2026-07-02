@@ -996,6 +996,13 @@
 
                 <input type="file" id="backupFileInput" accept=".xlsx, .xls" style="display: none;" onchange="handleBackupImport(event)">
                 <button class="btn-orange" style="background-color: #2196f3;" onclick="document.getElementById('backupFileInput').click()">⬆️ استيراد نسخة احتياطية</button>
+
+                <p style="font-size: 12px; color: #777; margin-top: 15px; margin-bottom: 10px; border-top: 1px solid #333; padding-top: 12px;">أو نسخة JSON كاملة ودقيقة 100% (لا تُفتح بالإكسل، بس أدق وأسرع بالاستعادة):</p>
+
+                <button class="btn-orange" style="background-color: #607d8b;" onclick="exportBackupToJson()">⬇️ تصدير نسخة JSON</button>
+
+                <input type="file" id="jsonBackupFileInput" accept=".json" style="display: none;" onchange="handleJsonBackupImport(event)">
+                <button class="btn-orange" style="background-color: #795548;" onclick="document.getElementById('jsonBackupFileInput').click()">⬆️ استيراد نسخة JSON</button>
             </div>
 
             <!-- النسخ الاحتياطي التلقائي على Google Drive -->
@@ -3075,6 +3082,74 @@ alert(msg);window._dupNames=[];
                 event.target.value = "";
             };
             reader.readAsArrayBuffer(file);
+        }
+
+        // --- تصدير نسخة احتياطية كاملة بصيغة JSON (نسخة طبق الأصل من البيانات، بدون أي تحويل أو احتمال فقدان دقة) ---
+        function exportBackupToJson() {
+            var backupData = gatherDriveBackupData(); // إعادة استخدام نفس دالة تجميع البيانات المستخدمة بنسخة Google Drive
+            var jsonString = JSON.stringify(backupData, null, 2);
+            var blob = new Blob([jsonString], { type: "application/json" });
+            var url = URL.createObjectURL(blob);
+
+            var link = document.createElement("a");
+            link.href = url;
+            link.download = "نسخة_احتياطية_" + TODAY_KEY + ".json";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            alert("✅ تم تصدير النسخة الاحتياطية (JSON) بنجاح.");
+        }
+
+        // --- استيراد نسخة احتياطية من ملف JSON سابق ---
+        function handleJsonBackupImport(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            if (!confirm("⚠️ سيتم استبدال بيانات التلاميذ وسجلات الغياب الحالية بمحتوى هذا الملف. هل تريد الاستمرار؟")) {
+                event.target.value = "";
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var backupData = JSON.parse(e.target.result);
+
+                    if (!backupData.students || !Array.isArray(backupData.students)) {
+                        alert("❌ لم يتم العثور على بيانات تلاميذ صالحة بهذا الملف. تأكد من أنه ملف نسخة احتياطية JSON صحيح.");
+                        event.target.value = "";
+                        return;
+                    }
+
+                    // استبدال البيانات الحالية بالكامل
+                    studentsList = backupData.students;
+                    localStorage.setItem("students", JSON.stringify(studentsList));
+
+                    attendanceByDate = backupData.attendanceByDate || {};
+                    if (!attendanceByDate[TODAY_KEY]) attendanceByDate[TODAY_KEY] = {};
+                    attendanceToday = attendanceByDate[TODAY_KEY];
+                    localStorage.setItem("attendanceByDate", JSON.stringify(attendanceByDate));
+
+                    if (backupData.schoolName) {
+                        localStorage.setItem("schoolName", backupData.schoolName);
+                        loadSchoolName();
+                    }
+
+                    sortStudentsAlphabetically();
+                    buildGradesSubmenu();
+                    updateStudentsTable();
+                    calculateStats();
+
+                    alert("✅ تم استيراد النسخة الاحتياطية (JSON) بنجاح! تم استبدال البيانات السابقة بمحتوى الملف.");
+                } catch (err) {
+                    console.error(err);
+                    alert("❌ حدث خطأ أثناء قراءة الملف. تأكد من أنه ملف JSON صالح تم تصديره من هذا التطبيق.");
+                }
+                event.target.value = "";
+            };
+            reader.readAsText(file);
         }
 
         // --- حذف كل الطلاب وسجلات الغياب والبدء من جديد (بتأكيد مزدوج لأنه إجراء لا يمكن التراجع عنه) ---
