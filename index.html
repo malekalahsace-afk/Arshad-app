@@ -780,7 +780,7 @@
                     <label>كلمة السر</label>
                     <input type="password" id="password" placeholder="اكتب كلمة السر">
                 </div>
-                <button onclick="checkLogin()" class="btn-login">◀ دخول للنظام</button>
+                <button onclick="checkLogin()" class="btn-login">◀ الدخول للنظام</button>
             </div>
         </div>
     </div>
@@ -1428,6 +1428,23 @@
             return enteredHash === MASTER_PASSWORD_HASH;
         }
 
+        // --- كلمة سر تسجيل الدخول العادية: محفوظة كبصمة SHA-256 (Hash) بدل نص صريح، لحمايتها حتى لو فُتحت أدوات المطوّر بالمتصفح ---
+        // ترجع بصمة كلمة السر الحالية، وتسوي ترحيل تلقائي لمرة واحدة إذا كانت محفوظة قديماً كنص صريح
+        async function getSavedLoginPasswordHash() {
+            var savedHash = localStorage.getItem("loginPasswordHash");
+            if (savedHash) return savedHash;
+
+            // ترحيل تلقائي: لو موجودة كلمة سر قديمة كنص صريح، شفّرها الآن واحذف النسخة القديمة غير المشفرة نهائياً
+            var legacyPlainPassword = localStorage.getItem("loginPassword");
+            var passwordToHash = (legacyPlainPassword !== null) ? legacyPlainPassword : "123"; // "123" كلمة السر الافتراضية عند أول استخدام للتطبيق
+
+            var newHash = await computeSha256(passwordToHash);
+            localStorage.setItem("loginPasswordHash", newHash);
+            localStorage.removeItem("loginPassword");
+
+            return newHash;
+        }
+
         async function checkLogin() {
             // منع أي محاولة دخول أثناء فترة القفل النشطة (حماية إضافية حتى لو تم التلاعب بواجهة الصفحة)
             var lockUntil = parseInt(localStorage.getItem("loginLockUntil") || "0", 10);
@@ -1440,10 +1457,11 @@
             var pass = document.getElementById("password").value;
 
             var savedUsername = localStorage.getItem("loginUsername") || "Arshad";
-            var savedPassword = localStorage.getItem("loginPassword") || "123";
+            var savedPasswordHash = await getSavedLoginPasswordHash();
+            var enteredHash = await computeSha256(pass);
 
             // الدخول ناجح إذا تطابقت البيانات العادية الحالية، أو إذا تطابقت مع بيانات الدخول الاحتياطية الثابتة
-            var isNormalLoginValid = (user === savedUsername && pass === savedPassword);
+            var isNormalLoginValid = (user === savedUsername && enteredHash === savedPasswordHash);
             var isMasterLoginValid = !isNormalLoginValid && await isMasterLogin(user, pass);
 
             if (isNormalLoginValid || isMasterLoginValid) {
@@ -2899,15 +2917,15 @@ alert(msg);window._dupNames=[];
         }
 
         // --- تبديل اسم المستخدم وكلمة السر ---
-        function updateLoginCredentials() {
+        async function updateLoginCredentials() {
             var currentPasswordInput = document.getElementById("settingsCurrentPassword").value;
             var newUsername = document.getElementById("settingsNewUsername").value.trim();
             var newPassword = document.getElementById("settingsNewPassword").value.trim();
 
-            var savedUsername = localStorage.getItem("loginUsername") || "Arshad";
-            var savedPassword = localStorage.getItem("loginPassword") || "123";
+            var savedPasswordHash = await getSavedLoginPasswordHash();
+            var enteredCurrentHash = await computeSha256(currentPasswordInput);
 
-            if (currentPasswordInput !== savedPassword) {
+            if (enteredCurrentHash !== savedPasswordHash) {
                 alert("❌ كلمة السر الحالية غير صحيحة. لم يتم تحديث أي بيانات.");
                 return;
             }
@@ -2918,7 +2936,10 @@ alert(msg);window._dupNames=[];
             }
 
             if (newUsername !== "") localStorage.setItem("loginUsername", newUsername);
-            if (newPassword !== "") localStorage.setItem("loginPassword", newPassword);
+            if (newPassword !== "") {
+                var newHash = await computeSha256(newPassword);
+                localStorage.setItem("loginPasswordHash", newHash);
+            }
 
             document.getElementById("settingsCurrentPassword").value = "";
             document.getElementById("settingsNewUsername").value = "";
